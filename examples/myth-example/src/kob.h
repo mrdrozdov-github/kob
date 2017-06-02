@@ -47,5 +47,6 @@ Variable * Sigmoid_forward(Variable *x);
 Variable * Sigmoid_backward(Variable *x, THFloatTensor *output, THFloatTensor *gradOutput);
 Variable * LogSoftMax_forward(Variable *x);
 Variable * LogSoftMax_backward(Variable *x, THFloatTensor *output, THFloatTensor *gradOutput);
+Variable * NLLLoss_forward(Variable *x, THLongTensor *target);
 
 void readFloat(THFile *file, THFloatTensor *tensor);

@@ -53,6 +53,12 @@ int main(int argc, char *argv[])
     Variable *outp_softmax = LogSoftMax_forward(inp_softmax);
     printf("forward (softmax): %f\n", THFloatTensor_sumall(outp_softmax->data));
 
+    THLongTensor *target = THLongTensor_newWithSize1d(batch_size);
+    THLongTensor_fill(target, 1);
+    Variable *inp_nll = outp_softmax;
+    Variable *outp_nll = NLLLoss_forward(inp_nll, target);
+    printf("forward (nll): %f\n", THFloatTensor_sumall(outp_nll->data));
+
     // Backward Pass
     THFloatTensor *loss = THFloatTensor_newWithSize2d(batch_size, outp_dim);
     THFloatTensor_fill(loss, 1.0);

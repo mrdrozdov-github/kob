@@ -166,6 +166,35 @@ Variable * LogSoftMax_backward(Variable *x, THFloatTensor *output, THFloatTensor
     return result;
 }
 
+Variable * NLLLoss_forward(Variable *x, THLongTensor *target) {
+    long batch_size = x->data->size[0];
+    long dim_size = x->data->size[1];
+
+    THFloatTensor *input = x->data;
+    THFloatTensor *output = THFloatTensor_newWithSize1d(1);
+    THFloatTensor_zero(output);
+    THNNState *state = NULL;
+    bool sizeAverage = true;
+    THFloatTensor *weights = NULL;
+    THFloatTensor *total_weight = THFloatTensor_newWithSize1d(1);
+    long ignore_index = -1;
+
+    THFloatTensor_fill(total_weight, 1.0);
+
+    THNN_FloatClassNLLCriterion_updateOutput(
+          state,
+          input,
+          target,
+          output,
+          sizeAverage,
+          weights,
+          total_weight,
+          ignore_index);
+
+    Variable *result = new Variable(output);
+    return result;
+}
+
 void readFloat(THFile *file, THFloatTensor *tensor) {
     THLongStorage *size = THFloatTensor_newSizeOf(tensor);
     THLongStorage *stride = THFloatTensor_newStrideOf(tensor);
