@@ -68,17 +68,23 @@ int main(int argc, char *argv[])
 
     Variable *grad_sigm = Sigmoid_backward(inp_sigm, outp_sigm->data, grad_linear2->data);
     printf("grad (sigm): %f\n", THFloatTensor_sumall(grad_sigm->data));
+    printf("grad (sigm)(numel): %td\n", THFloatTensor_nElement(grad_sigm->data));
 
     Variable *grad_linear1 = linear1->backward(inp_linear1, grad_sigm->data);
     printf("grad (linear1): %f\n", THFloatTensor_sumall(grad_linear1->data));
+    printf("grad (linear1)(numel): %td\n", THFloatTensor_nElement(grad_linear1->data));
 
     printf("grads (linear1): %f\n", THFloatTensor_sumall(linear1->gradWeight));
-    printf("grads (linear2): %f\n", THFloatTensor_sumall(linear2->gradWeight));
     printf("grads (linear1)[0]: %f\n", THFloatTensor_data(linear1->gradWeight)[0]);
+    printf("grads (linear2): %f\n", THFloatTensor_sumall(linear2->gradWeight));
+    printf("grads (linear2)[0]: %f\n", THFloatTensor_data(linear2->gradWeight)[0]);
 
     THFloatTensor_csub(linear1->weight, linear1->weight, FLAGS_learning_rate, linear1->gradWeight);
-    printf("weight: %f\n", THFloatTensor_sumall(linear1->weight));
-    printf("weight[0]: %f\n", THFloatTensor_data(linear1->weight)[0]);
+    THFloatTensor_csub(linear2->weight, linear2->weight, FLAGS_learning_rate, linear2->gradWeight);
+    printf("weight1: %f\n", THFloatTensor_sumall(linear1->weight));
+    printf("weight1[0]: %f\n", THFloatTensor_data(linear1->weight)[0]);
+    printf("weight2: %f\n", THFloatTensor_sumall(linear2->weight));
+    printf("weight2[0]: %f\n", THFloatTensor_data(linear2->weight)[0]);
 
     THFloatTensor_free(batch);
     THFile_free(batch_file);
