@@ -92,6 +92,37 @@ Variable * Linear::backward(Variable *x, THFloatTensor *gradOutput) {
     return result;
 }
 
+Variable * Sigmoid_forward(Variable *x) {
+    THFloatTensor *input = x->data;
+    THFloatTensor *output = THFloatTensor_newWithTensor(input);
+    THNNState *state = NULL;
+
+    THNN_FloatSigmoid_updateOutput(
+          state,
+          input,
+          output);
+
+    Variable *result = new Variable(output);
+    return result;
+}
+
+Variable * Sigmoid_backward(Variable *x, THFloatTensor *output, THFloatTensor *gradOutput) {
+    THFloatTensor *input = x->data;
+    THFloatTensor *gradInput = THFloatTensor_newWithTensor(input);
+    THNNState *state = NULL;
+    THFloatTensor_zero(gradInput);
+
+    THNN_FloatSigmoid_updateGradInput(
+          state,
+          input,
+          gradOutput,
+          gradInput,
+          output);
+
+    Variable *result = new Variable(gradInput);
+    return result;
+}
+
 void readFloat(THFile *file, THFloatTensor *tensor) {
     THLongStorage *size = THFloatTensor_newSizeOf(tensor);
     THLongStorage *stride = THFloatTensor_newStrideOf(tensor);

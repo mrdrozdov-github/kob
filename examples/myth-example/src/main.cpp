@@ -30,8 +30,11 @@ int main(int argc, char *argv[])
 
     // Forward Pass
     Variable *batch_var = new Variable(batch);
-    Variable *outp = linear->forward(batch_var);
-    printf("forward: %f\n", THFloatTensor_sumall(outp->data));
+    Variable *outp_linear = linear->forward(batch_var);
+    printf("forward: %f\n", THFloatTensor_sumall(outp_linear->data));
+
+    Variable *outp_sigm = Sigmoid_forward(outp_linear);
+    printf("forward: %f\n", THFloatTensor_sumall(outp_sigm->data));
 
     // Backward Pass
     THFloatTensor *loss = THFloatTensor_newWithSize2d(batch_size, outp_dim);
@@ -39,8 +42,12 @@ int main(int argc, char *argv[])
     printf("loss: %f\n", THFloatTensor_sumall(loss));
     linear->clear_grads();
     printf("grads: %f\n", THFloatTensor_sumall(linear->gradWeight));
-    Variable *gradInput = linear->backward(outp, loss);
-    printf("gradInput: %f\n", THFloatTensor_sumall(gradInput->data));
+
+    Variable *grad_sigm = linear->backward(outp_sigm, loss);
+    printf("gradInput: %f\n", THFloatTensor_sumall(grad_sigm->data));
+
+    Variable *grad_linear = linear->backward(outp_linear, grad_sigm->data);
+    printf("gradInput: %f\n", THFloatTensor_sumall(grad_linear->data));
     printf("grads: %f\n", THFloatTensor_sumall(linear->gradWeight));
     printf("grads[0]: %f\n", THFloatTensor_data(linear->gradWeight)[0]);
 
