@@ -49,6 +49,10 @@ int main(int argc, char *argv[])
     Variable *outp_linear2 = Sigmoid_forward(inp_linear2);
     printf("forward (linear2): %f\n", THFloatTensor_sumall(outp_linear2->data));
 
+    Variable *inp_softmax = outp_linear2;
+    Variable *outp_softmax = LogSoftMax_forward(inp_softmax);
+    printf("forward (softmax): %f\n", THFloatTensor_sumall(outp_softmax->data));
+
     // Backward Pass
     THFloatTensor *loss = THFloatTensor_newWithSize2d(batch_size, outp_dim);
     THFloatTensor_fill(loss, 1.0);
@@ -62,7 +66,11 @@ int main(int argc, char *argv[])
     printf("grads (linear1)[0]: %f\n", THFloatTensor_data(linear1->gradWeight)[0]);
     printf("grads (linear2)[0]: %f\n", THFloatTensor_data(linear2->gradWeight)[0]);
 
-    Variable *grad_linear2 = linear2->backward(inp_linear2, loss);
+    Variable *grad_softmax = linear2->backward(inp_softmax, loss);
+    printf("grad (softmax): %f\n", THFloatTensor_sumall(grad_softmax->data));
+    printf("grad (softmax)(numel): %td\n", THFloatTensor_nElement(grad_softmax->data));
+
+    Variable *grad_linear2 = linear2->backward(inp_linear2, grad_softmax->data);
     printf("grad (linear2): %f\n", THFloatTensor_sumall(grad_linear2->data));
     printf("grad (linear2)(numel): %td\n", THFloatTensor_nElement(grad_linear2->data));
 

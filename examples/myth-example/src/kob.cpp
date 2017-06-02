@@ -128,6 +128,44 @@ Variable * Sigmoid_backward(Variable *x, THFloatTensor *output, THFloatTensor *g
     return result;
 }
 
+Variable * LogSoftMax_forward(Variable *x) {
+    long batch_size = x->data->size[0];
+    long dim_size = x->data->size[1];
+
+    THFloatTensor *input = x->data;
+    THFloatTensor *output = THFloatTensor_newWithSize2d(batch_size, dim_size);
+    THFloatTensor_zero(output);
+    THNNState *state = NULL;
+
+    THNN_FloatLogSoftMax_updateOutput(
+          state,
+          input,
+          output);
+
+    Variable *result = new Variable(output);
+    return result;
+}
+
+Variable * LogSoftMax_backward(Variable *x, THFloatTensor *output, THFloatTensor *gradOutput) {
+    long batch_size = x->data->size[0];
+    long dim_size = x->data->size[1];
+
+    THFloatTensor *input = x->data;
+    THFloatTensor *gradInput = THFloatTensor_newWithSize2d(batch_size, dim_size);
+    THNNState *state = NULL;
+    THFloatTensor_zero(gradInput);
+
+    THNN_FloatLogSoftMax_updateGradInput(
+          state,
+          input,
+          gradOutput,
+          gradInput,
+          output);
+
+    Variable *result = new Variable(gradInput);
+    return result;
+}
+
 void readFloat(THFile *file, THFloatTensor *tensor) {
     THLongStorage *size = THFloatTensor_newSizeOf(tensor);
     THLongStorage *stride = THFloatTensor_newStrideOf(tensor);
