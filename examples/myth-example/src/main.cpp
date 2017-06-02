@@ -72,7 +72,11 @@ int main(int argc, char *argv[])
     printf("grads (linear1)[0]: %f\n", THFloatTensor_data(linear1->gradWeight)[0]);
     printf("grads (linear2)[0]: %f\n", THFloatTensor_data(linear2->gradWeight)[0]);
 
-    Variable *grad_softmax = linear2->backward(inp_softmax, loss);
+    Variable *grad_nll = NLLLoss_backward(inp_nll, target, outp_nll->data, loss);
+    printf("grad (nll): %f\n", THFloatTensor_sumall(grad_nll->data));
+    printf("grad (nll)(numel): %td\n", THFloatTensor_nElement(grad_nll->data));
+
+    Variable *grad_softmax = LogSoftMax_backward(inp_softmax, outp_softmax->data, grad_nll->data);
     printf("grad (softmax): %f\n", THFloatTensor_sumall(grad_softmax->data));
     printf("grad (softmax)(numel): %td\n", THFloatTensor_nElement(grad_softmax->data));
 

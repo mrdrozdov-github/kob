@@ -177,9 +177,8 @@ Variable * NLLLoss_forward(Variable *x, THLongTensor *target) {
     bool sizeAverage = true;
     THFloatTensor *weights = NULL;
     THFloatTensor *total_weight = THFloatTensor_newWithSize1d(1);
-    long ignore_index = -1;
-
     THFloatTensor_fill(total_weight, 1.0);
+    long ignore_index = -1;
 
     THNN_FloatClassNLLCriterion_updateOutput(
           state,
@@ -192,6 +191,34 @@ Variable * NLLLoss_forward(Variable *x, THLongTensor *target) {
           ignore_index);
 
     Variable *result = new Variable(output);
+    return result;
+}
+
+Variable * NLLLoss_backward(Variable *x, THLongTensor *target, THFloatTensor *output, THFloatTensor *gradOutput) {
+    long batch_size = x->data->size[0];
+    long dim_size = x->data->size[1];
+
+    THFloatTensor *input = x->data;
+    THFloatTensor *gradInput = THFloatTensor_newWithSize2d(batch_size, dim_size);
+    THNNState *state = NULL;
+    THFloatTensor_zero(gradInput);
+    bool sizeAverage = true;
+    THFloatTensor *weights = NULL;
+    THFloatTensor *total_weight = THFloatTensor_newWithSize1d(1);
+    THFloatTensor_fill(total_weight, 1.0);
+    long ignore_index = -1;
+
+    THNN_FloatClassNLLCriterion_updateGradInput(
+          state,
+          input,
+          target,
+          gradInput,
+          sizeAverage,
+          weights,
+          total_weight,
+          ignore_index);
+
+    Variable *result = new Variable(gradInput);
     return result;
 }
 
