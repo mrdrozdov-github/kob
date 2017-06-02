@@ -1,6 +1,6 @@
 TARGET="./build/demo"
 CC=g++
-LINK=-lTH -lTHNN
+LINK=-lTH -lTHNN /usr/local/lib/libgflags.a
 OPT=-std=c++11 -g -v
 INCLUDES=-I/Users/Andrew/Developer/kob-setup/include -I/Users/Andrew/Developer/kob-setup/include/TH -I/Users/Andrew/Developer/kob-setup/include/THNN
 LIBS=-L/Users/Andrew/Developer/kob-setup/lib

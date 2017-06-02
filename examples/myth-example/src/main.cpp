@@ -1,5 +1,6 @@
 #include "TH/TH.h"
 #include "THNN/THNN.h"
+#include "gflags/gflags.h"
 
 class Variable
 {
@@ -46,15 +47,27 @@ Linear::Linear(int inpDim, int outpDim) {
     this->outpDim = outpDim;
     this->weight = THFloatTensor_newWithSize2d(this->outpDim, this->inpDim);
     this->bias = THFloatTensor_newWithSize1d(this->outpDim);
+
+    THFloatTensor_zero(this->bias);
 }
 
 Variable * Linear::forward(Variable *x) {
+    int dim = x->data->nDimension;
     THFloatTensor *input = x->data;
     THFloatTensor *weight = this->weight;
-    THFloatTensor *bias = NULL;
+    THFloatTensor *bias = this->bias;
     THNNState *state = NULL;
-    THFloatTensor *addBuffer = NULL;
-    THFloatTensor *output = THFloatTensor_newWithSize1d(this->outpDim);
+    THFloatTensor *addBuffer;
+    THFloatTensor *output;
+
+    if (dim == 1) {
+        output = THFloatTensor_newWithSize1d(this->outpDim);
+    } else if (dim == 2) {
+        long batch_size = x->data->size[0];
+        addBuffer = THFloatTensor_newWithSize1d(batch_size);
+        output = THFloatTensor_newWithSize2d(batch_size, this->outpDim);
+    }
+
     THNN_FloatLinear_updateOutput(
         state,
         input,
@@ -71,47 +84,52 @@ Variable * Linear::backward() {
     return NULL;
 }
 
-int main()
+void readFloat(THFile *file, THFloatTensor *tensor) {
+    THLongStorage *size = THFloatTensor_newSizeOf(tensor);
+    THLongStorage *stride = THFloatTensor_newStrideOf(tensor);
+    ptrdiff_t numel = THFloatTensor_nElement(tensor);
+
+    // Flatten
+    THFloatTensor_resize1d(tensor, numel);
+    // Read Data
+    THFile_readFloat(file, tensor->storage);
+    // Restore Original Size
+    THFloatTensor_resize(tensor, size, stride);
+
+    THLongStorage_free(size);
+    THLongStorage_free(stride);
+}
+
+DEFINE_string(batch_file, "y", "Data file");
+DEFINE_string(weight_file, "w", "Data file");
+DEFINE_int32(batch_size, 2, "Data dim");
+DEFINE_int32(inp_dim, 10, "Data dim");
+DEFINE_int32(outp_dim, 10, "Data dim");
+
+int main(int argc, char *argv[])
 {
-    THFile *x_file = THDiskFile_new("x", "r", 0);
-    THFile *y_file = THDiskFile_new("y", "r", 0);
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
+    gflags::ShutDownCommandLineFlags();
 
-    THFloatTensor *x = THFloatTensor_newWithSize1d(10);
-    THFloatTensor *y = THFloatTensor_newWithSize1d(10);
+    THFile *batch_file = THDiskFile_new(FLAGS_batch_file.c_str(), "r", 0);
+    THFile *weight_file = THDiskFile_new(FLAGS_weight_file.c_str(), "r", 0);
 
-    THFile_readFloat(x_file, x->storage);
-    THFile_readFloat(y_file, y->storage);
-
-    double result = THFloatTensor_dot(x, y) + THFloatTensor_sumall(x);
-
-    printf("%f\n", result);
-
-    THFloatTensor *z = THFloatTensor_newWithSize1d(10);
-    THFloatTensor *zz = THFloatTensor_newWithSize1d(10);
-    THNN_FloatLogSigmoid_updateOutput(NULL, x, z, zz);
-
-    printf("%f\n", THFloatTensor_sumall(z));
-    printf("%f\n", THFloatTensor_sumall(zz));
-
-    THFloatTensor_free(x);
-    THFloatTensor_free(y);
-    THFile_free(x_file);
-    THFile_free(y_file);
-
-    THFile *batch_file = THDiskFile_new("y", "r", 0);
-    THFile *weight_file = THDiskFile_new("w", "r", 0);
-
-    int inp_dim = 10;
-    int outp_dim = 10;
-    THFloatTensor *batch = THFloatTensor_newWithSize1d(inp_dim);
+    int batch_size = FLAGS_batch_size;
+    int inp_dim = FLAGS_inp_dim;
+    int outp_dim = FLAGS_outp_dim;
+    THFloatTensor *batch = THFloatTensor_newWithSize2d(batch_size, inp_dim);
     Linear *linear = new Linear(inp_dim, outp_dim);
 
-    THFile_readFloat(batch_file, batch->storage);
-    THFile_readFloat(weight_file, linear->weight->storage);
+    readFloat(batch_file, batch);
+    readFloat(weight_file, linear->weight);
 
     Variable *batch_var = new Variable(batch);
     Variable *outp = linear->forward(batch_var);
     printf("%f\n", THFloatTensor_sumall(outp->data));
+
+    THFloatTensor_free(batch);
+    THFile_free(batch_file);
+    THFile_free(weight_file);
 
     return 0;
 }
