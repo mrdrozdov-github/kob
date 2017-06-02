@@ -1,4 +1,4 @@
-TARGET="./main"
+TARGET="./build/main"
 CC=g++
 LINK=
 OPT=-std=c++11 -g -v
@@ -21,4 +21,4 @@ makefile.depend:
 	g++ -MM -MG $(SRC) $(OPT) $(LINK) > makefile.depend
 
 clean:
-	rm ./main
+	rm ./build/main
