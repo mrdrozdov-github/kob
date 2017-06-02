@@ -65,7 +65,6 @@ Variable * Linear::backward(Variable *x, THFloatTensor *gradOutput) {
     THFloatTensor *gradWeight = this->gradWeight; // TODO
     THFloatTensor *gradBias = this->gradBias; // TODO
 
-    printf("updateGradInput\n");
     // Calculate gradient with respect to input.
     THNN_FloatLinear_updateGradInput(
           state,
@@ -74,7 +73,6 @@ Variable * Linear::backward(Variable *x, THFloatTensor *gradOutput) {
           gradInput,
           weight);
 
-    printf("accGradParameters\n");
     // Done for layers that have parameters.
     THNN_FloatLinear_accGradParameters(
           state,
@@ -93,8 +91,12 @@ Variable * Linear::backward(Variable *x, THFloatTensor *gradOutput) {
 }
 
 Variable * Sigmoid_forward(Variable *x) {
+    long batch_size = x->data->size[0];
+    long dim_size = x->data->size[1];
+
     THFloatTensor *input = x->data;
-    THFloatTensor *output = THFloatTensor_newWithTensor(input);
+    THFloatTensor *output = THFloatTensor_newWithSize2d(batch_size, dim_size);
+    THFloatTensor_zero(output);
     THNNState *state = NULL;
 
     THNN_FloatSigmoid_updateOutput(
@@ -107,8 +109,11 @@ Variable * Sigmoid_forward(Variable *x) {
 }
 
 Variable * Sigmoid_backward(Variable *x, THFloatTensor *output, THFloatTensor *gradOutput) {
+    long batch_size = x->data->size[0];
+    long dim_size = x->data->size[1];
+
     THFloatTensor *input = x->data;
-    THFloatTensor *gradInput = THFloatTensor_newWithTensor(input);
+    THFloatTensor *gradInput = THFloatTensor_newWithSize2d(batch_size, dim_size);
     THNNState *state = NULL;
     THFloatTensor_zero(gradInput);
 
