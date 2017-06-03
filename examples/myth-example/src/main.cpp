@@ -72,36 +72,55 @@ int main(int argc, char *argv[])
     // printf("weight2: %f\n", THFloatTensor_sumall(linear2->weight));
     // printf("weight2[0]: %f\n", THFloatTensor_data(linear2->weight)[0]);
 
+    Variable *train_var = new Variable(data);
+    Variable *eval_var = new Variable(eval_data);
+    THLongTensor *target = labels;
+    THLongTensor *eval_target = eval_labels;
+    Variable *inp_linear1;
+    Variable *outp_linear1;
+    Variable *inp_sigm;
+    Variable *outp_sigm;
+    Variable *inp_linear2;
+    Variable *outp_linear2;
+    Variable *inp_softmax;
+    Variable *outp_softmax;
+    Variable *inp_nll;
+    Variable *outp_nll;
+
+    Variable *grad_nll;
+    Variable *grad_softmax;
+    Variable *grad_linear2;
+    Variable *grad_sigm;
+    Variable *grad_linear1;
+
     for (int step = 0; step < FLAGS_steps; step++) {
         // TODO: Shuffling
 
         // Forward Pass
-        Variable *batch_var = new Variable(data);
         // printf("forward (batch)(numel): %td\n", THFloatTensor_nElement(batch_var->data));
 
-        Variable *inp_linear1 = batch_var;
-        Variable *outp_linear1 = linear1->forward(batch_var);
+        inp_linear1 = train_var;
+        outp_linear1 = linear1->forward(inp_linear1);
         // printf("forward (linear1)(numel): %td\n", THFloatTensor_nElement(outp_linear1->data));
         // printf("forward (linear1): %f\n", THFloatTensor_sumall(outp_linear1->data));
 
-        Variable *inp_sigm = outp_linear1;
-        Variable *outp_sigm = Sigmoid_forward(inp_sigm);
+        inp_sigm = outp_linear1;
+        outp_sigm = Sigmoid_forward(inp_sigm);
         // printf("forward (sigm)(numel): %td\n", THFloatTensor_nElement(outp_sigm->data));
         // printf("forward (sigm): %f\n", THFloatTensor_sumall(outp_sigm->data));
 
-        Variable *inp_linear2 = outp_sigm;
-        Variable *outp_linear2 = linear2->forward(inp_linear2);
+        inp_linear2 = outp_sigm;
+        outp_linear2 = linear2->forward(inp_linear2);
         // printf("forward (linear2)(numel): %td\n", THFloatTensor_nElement(outp_linear2->data));
         // printf("forward (linear2): %f\n", THFloatTensor_sumall(outp_linear2->data));
 
-        Variable *inp_softmax = outp_linear2;
-        Variable *outp_softmax = LogSoftMax_forward(inp_softmax);
+        inp_softmax = outp_linear2;
+        outp_softmax = LogSoftMax_forward(inp_softmax);
         // printf("forward (softmax)(numel): %td\n", THFloatTensor_nElement(outp_softmax->data));
         // printf("forward (softmax): %f\n", THFloatTensor_sumall(outp_softmax->data));
 
-        THLongTensor *target = labels;
-        Variable *inp_nll = outp_softmax;
-        Variable *outp_nll = NLLLoss_forward(inp_nll, target);
+        inp_nll = outp_softmax;
+        outp_nll = NLLLoss_forward(inp_nll, target);
         // printf("forward (nll)(numel): %td\n", THFloatTensor_nElement(outp_nll->data));
         printf("[%d] forward (nll): %f\n", step, THFloatTensor_sumall(outp_nll->data));
 
@@ -118,23 +137,23 @@ int main(int argc, char *argv[])
         // printf("grads (linear1)[0]: %f\n", THFloatTensor_data(linear1->gradWeight)[0]);
         // printf("grads (linear2)[0]: %f\n", THFloatTensor_data(linear2->gradWeight)[0]);
 
-        Variable *grad_nll = NLLLoss_backward(inp_nll, target);
+        grad_nll = NLLLoss_backward(inp_nll, target);
         // printf("grad (nll): %f\n", THFloatTensor_sumall(grad_nll->data));
         // printf("grad (nll)(numel): %td\n", THFloatTensor_nElement(grad_nll->data));
 
-        Variable *grad_softmax = LogSoftMax_backward(inp_softmax, outp_softmax->data, grad_nll->data);
+        grad_softmax = LogSoftMax_backward(inp_softmax, outp_softmax->data, grad_nll->data);
         // printf("grad (softmax): %f\n", THFloatTensor_sumall(grad_softmax->data));
         // printf("grad (softmax)(numel): %td\n", THFloatTensor_nElement(grad_softmax->data));
 
-        Variable *grad_linear2 = linear2->backward(inp_linear2, grad_softmax->data);
+        grad_linear2 = linear2->backward(inp_linear2, grad_softmax->data);
         // printf("grad (linear2): %f\n", THFloatTensor_sumall(grad_linear2->data));
         // printf("grad (linear2)(numel): %td\n", THFloatTensor_nElement(grad_linear2->data));
 
-        Variable *grad_sigm = Sigmoid_backward(inp_sigm, outp_sigm->data, grad_linear2->data);
+        grad_sigm = Sigmoid_backward(inp_sigm, outp_sigm->data, grad_linear2->data);
         // printf("grad (sigm): %f\n", THFloatTensor_sumall(grad_sigm->data));
         // printf("grad (sigm)(numel): %td\n", THFloatTensor_nElement(grad_sigm->data));
 
-        Variable *grad_linear1 = linear1->backward(inp_linear1, grad_sigm->data);
+        grad_linear1 = linear1->backward(inp_linear1, grad_sigm->data);
         // printf("grad (linear1): %f\n", THFloatTensor_sumall(grad_linear1->data));
         // printf("grad (linear1)(numel): %td\n", THFloatTensor_nElement(grad_linear1->data));
 
@@ -150,20 +169,36 @@ int main(int argc, char *argv[])
         // printf("weight2: %f\n", THFloatTensor_sumall(linear2->weight));
         // printf("weight2[0]: %f\n", THFloatTensor_data(linear2->weight)[0]);
 
+        delete outp_linear1;
+        delete outp_sigm;
+        delete outp_linear2;
+        delete outp_softmax;
+        delete outp_nll;
+
+        delete grad_nll;
+        delete grad_softmax;
+        delete grad_linear2;
+        delete grad_sigm;
+        delete grad_linear1;
+
         // Eval
-        batch_var = new Variable(eval_data);
-        inp_linear1 = batch_var;
-        outp_linear1 = linear1->forward(batch_var);
+        inp_linear1 = eval_var;
+        outp_linear1 = linear1->forward(inp_linear1);
         inp_sigm = outp_linear1;
         outp_sigm = Sigmoid_forward(inp_sigm);
         inp_linear2 = outp_sigm;
         outp_linear2 = linear2->forward(inp_linear2);
         inp_softmax = outp_linear2;
         outp_softmax = LogSoftMax_forward(inp_softmax);
-        target = eval_labels;
         inp_nll = outp_softmax;
-        outp_nll = NLLLoss_forward(inp_nll, target);
+        outp_nll = NLLLoss_forward(inp_nll, eval_target);
         printf("[%d] eval (nll): %f\n", step, THFloatTensor_sumall(outp_nll->data));
+
+        delete outp_linear1;
+        delete outp_sigm;
+        delete outp_linear2;
+        delete outp_softmax;
+        delete outp_nll;
     }
 
     return 0;
