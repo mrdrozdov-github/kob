@@ -1,6 +1,8 @@
 #include "kob.h"
 #include "gflags/gflags.h"
 
+#define DO_EVAL false
+
 DEFINE_string(train_data_file, "train_data.txt", "Data file");
 DEFINE_string(train_labels_file, "train_labels.txt", "Data file");
 DEFINE_string(eval_data_file, "test_data.txt", "Data file");
@@ -182,23 +184,25 @@ int main(int argc, char *argv[])
         delete grad_linear1;
 
         // Eval
-        inp_linear1 = eval_var;
-        outp_linear1 = linear1->forward(inp_linear1);
-        inp_sigm = outp_linear1;
-        outp_sigm = Sigmoid_forward(inp_sigm);
-        inp_linear2 = outp_sigm;
-        outp_linear2 = linear2->forward(inp_linear2);
-        inp_softmax = outp_linear2;
-        outp_softmax = LogSoftMax_forward(inp_softmax);
-        inp_nll = outp_softmax;
-        outp_nll = NLLLoss_forward(inp_nll, eval_target);
-        printf("[%d] eval (nll): %f\n", step, THFloatTensor_sumall(outp_nll->data));
+        if (DO_EVAL) {
+            inp_linear1 = eval_var;
+            outp_linear1 = linear1->forward(inp_linear1);
+            inp_sigm = outp_linear1;
+            outp_sigm = Sigmoid_forward(inp_sigm);
+            inp_linear2 = outp_sigm;
+            outp_linear2 = linear2->forward(inp_linear2);
+            inp_softmax = outp_linear2;
+            outp_softmax = LogSoftMax_forward(inp_softmax);
+            inp_nll = outp_softmax;
+            outp_nll = NLLLoss_forward(inp_nll, eval_target);
+            printf("[%d] eval (nll): %f\n", step, THFloatTensor_sumall(outp_nll->data));
 
-        delete outp_linear1;
-        delete outp_sigm;
-        delete outp_linear2;
-        delete outp_softmax;
-        delete outp_nll;
+            delete outp_linear1;
+            delete outp_sigm;
+            delete outp_linear2;
+            delete outp_softmax;
+            delete outp_nll;
+        }
     }
 
     return 0;

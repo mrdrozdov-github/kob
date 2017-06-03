@@ -50,6 +50,9 @@ Variable * Linear::forward(Variable *x) {
         weight,
         bias,
         addBuffer);
+
+    THFloatTensor_free(addBuffer);
+
     Variable *result = new Variable(output);
     return result;
 }
@@ -89,6 +92,8 @@ Variable * Linear::backward(Variable *x, THFloatTensor *gradOutput) {
           gradBias,
           addBuffer,
           scale);
+
+    THFloatTensor_free(addBuffer);
 
     Variable *result = new Variable(gradInput);
     return result;
@@ -194,6 +199,8 @@ Variable * NLLLoss_forward(Variable *x, THLongTensor *target) {
           total_weight,
           ignore_index);
 
+    THFloatTensor_free(total_weight);
+
     Variable *result = new Variable(output);
     return result;
 }
@@ -221,6 +228,8 @@ Variable * NLLLoss_backward(Variable *x, THLongTensor *target) {
           weights,
           total_weight,
           ignore_index);
+
+    THFloatTensor_free(total_weight);
 
     Variable *result = new Variable(gradInput);
     return result;
