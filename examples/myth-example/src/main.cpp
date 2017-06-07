@@ -5,7 +5,6 @@
 #include "batch_reader.h"
 #include "gflags/gflags.h"
 
-#define DO_EVAL false
 #define PRINT_SAMPLE false
 
 using namespace std;
@@ -32,7 +31,7 @@ DEFINE_string(eval_data_file, "test_data.txt", "Data file");
 DEFINE_string(eval_labels_file, "test_labels.txt", "Data file");
 DEFINE_string(weight1_file, "w1", "Data file");
 DEFINE_string(weight2_file, "w2", "Data file");
-DEFINE_int32(data_size, 100, "Data dim");
+DEFINE_int32(data_size, 60000, "Data dim");
 DEFINE_int32(eval_data_size, 100, "Data dim");
 DEFINE_int32(batch_size, 100, "Data dim");
 DEFINE_int32(inp_dim, 784, "Data dim");
@@ -42,6 +41,7 @@ DEFINE_int32(steps, 1, "Data dim");
 DEFINE_int32(seed, 11, "Random seed");
 DEFINE_int32(epochs, 10, "Number of epochs");
 DEFINE_double(learning_rate, 0.001, "Data dim");
+DEFINE_bool(run_eval, false, "Run eval once per epoch");
 
 void print_mnist(float *item) {
     int size = 28;
@@ -57,6 +57,73 @@ void print_mnist(float *item) {
     std::cout << std::endl;
 }
 
+void run_eval(Linear *linear1, Linear *linear2) {
+    string filename = "/Users/Andrew/Developer/kob/examples/h5mnist/test.h5";
+    int n = 10000;
+    int size = FLAGS_inp_dim;
+    int batch_size = FLAGS_batch_size;
+    int num_batches = n / batch_size;
+
+    BatchReader batch_reader = BatchReader(filename, "images", n, size);
+    BatchReader batch_reader_labels = BatchReader(filename, "labels", n, 1);
+
+    H5File file(filename, H5F_ACC_RDONLY);
+    DataSet dataset_images = file.openDataSet("images");
+    DataSet dataset_labels = file.openDataSet("labels");
+
+    THFloatTensor *batch = THFloatTensor_newWithSize2d(FLAGS_batch_size, size);
+    THLongTensor *target = THLongTensor_newWithSize1d(FLAGS_batch_size);
+
+    Variable *inp_linear1;
+    Variable *outp_linear1;
+    Variable *inp_sigm;
+    Variable *outp_sigm;
+    Variable *inp_linear2;
+    Variable *outp_linear2;
+    Variable *inp_softmax;
+    Variable *outp_softmax;
+    Variable *inp_nll;
+    Variable *outp_nll;
+
+    Variable *var = new Variable(batch);
+
+    int index[n];
+    for (int i=0; i<n; ++i) {
+        index[i] = i;
+    }
+
+    for (int i_batch = 0; i_batch < num_batches; ++i_batch) {
+        // Prepare batch.
+        batch_reader.read_batch(THFloatTensor_data(var->data), index + i_batch * batch_size, batch_size, file, dataset_images);
+        batch_reader_labels.read_batch(THLongTensor_data(target), index + i_batch * batch_size, batch_size, file, dataset_labels);
+
+        // Fix labels.
+        THLongTensor_add(target, target, 1);
+
+        inp_linear1 = var;
+        outp_linear1 = linear1->forward(inp_linear1);
+        inp_sigm = outp_linear1;
+        outp_sigm = Sigmoid_forward(inp_sigm);
+        inp_linear2 = outp_sigm;
+        outp_linear2 = linear2->forward(inp_linear2);
+        inp_softmax = outp_linear2;
+        outp_softmax = LogSoftMax_forward(inp_softmax);
+        inp_nll = outp_softmax;
+        outp_nll = NLLLoss_forward(inp_nll, target);
+
+        printf("Eval: [%d/%d (%.0f%%)]\tLoss: %.6f\n",
+        i_batch * batch_size, n,
+        100. * i_batch / num_batches, THFloatTensor_sumall(outp_nll->data));
+    }
+
+
+    delete outp_linear1;
+    delete outp_sigm;
+    delete outp_linear2;
+    delete outp_softmax;
+    delete outp_nll;
+}
+
 int main(int argc, char *argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -70,17 +137,17 @@ int main(int argc, char *argv[])
     srand(FLAGS_seed);
 
     string filename = "/Users/Andrew/Developer/kob/examples/h5mnist/train.h5";
-    int n = 55000;
-    int size = 784;
+    int n = FLAGS_data_size;
+    int size = FLAGS_inp_dim;
     int batch_size = FLAGS_batch_size;
     int num_batches = n / batch_size;
+
+    BatchReader batch_reader = BatchReader(filename, "images", n, size);
+    BatchReader batch_reader_labels = BatchReader(filename, "labels", n, 1);
 
     H5File file(filename, H5F_ACC_RDONLY);
     DataSet dataset_images = file.openDataSet("images");
     DataSet dataset_labels = file.openDataSet("labels");
-
-    BatchReader batch_reader = BatchReader(filename, "images", n, size);
-    BatchReader batch_reader_labels = BatchReader(filename, "labels", n, 1);
 
     THFloatTensor *batch = THFloatTensor_newWithSize2d(FLAGS_batch_size, size);
     THLongTensor *target = THLongTensor_newWithSize1d(FLAGS_batch_size);
@@ -168,7 +235,10 @@ int main(int argc, char *argv[])
 
             inp_nll = outp_softmax;
             outp_nll = NLLLoss_forward(inp_nll, target);
-            printf("[epoch=%d, batch=%d] forward (nll): %f\n", i_epoch, i_batch, THFloatTensor_sumall(outp_nll->data));
+            // printf("[epoch=%d, batch=%d] forward (nll): %f\n", i_epoch, i_batch, THFloatTensor_sumall(outp_nll->data));
+            printf("Train Epoch: %d [%d/%d (%.0f%%)]\tLoss: %.6f\n",
+                i_epoch, i_batch * batch_size, n,
+                100. * i_batch / num_batches, THFloatTensor_sumall(outp_nll->data));
 
             // Backward Pass
             linear1->clear_grads();
@@ -196,6 +266,10 @@ int main(int argc, char *argv[])
             delete grad_linear2;
             delete grad_sigm;
             delete grad_linear1;
+        }
+
+        if (FLAGS_run_eval) {
+            run_eval(linear1, linear2);
         }
     }
 
