@@ -1,7 +1,21 @@
+#include <math.h>
+#include <iostream>
+
 #include "kob.h"
+#include "batch_reader.h"
 #include "gflags/gflags.h"
 
 #define DO_EVAL false
+#define PRINT_SAMPLE false
+
+/*
+
+TODO:
+
+- [ ] batching
+- [ ] don't need to specify data size
+
+*/
 
 DEFINE_string(train_data_file, "train_data.txt", "Data file");
 DEFINE_string(train_labels_file, "train_labels.txt", "Data file");
@@ -18,8 +32,41 @@ DEFINE_int32(outp_dim, 10, "Data dim");
 DEFINE_int32(steps, 1, "Data dim");
 DEFINE_double(learning_rate, 0.001, "Data dim");
 
+void print_mnist(float *item) {
+    int size = 28;
+    int i, j;
+    for (j = 0; j < size; j++)
+    {
+        for (i = 0; i < size; i++)
+        {
+            std::cout << ceil(item[j*28 + i]) << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
+    string filename = "/Users/Andrew/Developer/kob/examples/h5mnist/train.h5";
+    string datasetname = "images";
+    int n = 55000;
+    int size = 784;
+    int batch_size = FLAGS_batch_size;
+    BatchReader batch_reader = BatchReader(filename, datasetname, n, size);
+
+    float batch[batch_size * size];
+
+    // Print sample of data.
+    if (PRINT_SAMPLE) {
+        for (int i = 0; i < 3; i++) {
+            batch_reader.read_item(batch + i * size, i);
+            print_mnist(batch + i * size);
+        }
+    }
+
+    return 0;
+
     gflags::ParseCommandLineFlags(&argc, &argv, true);
     gflags::ShutDownCommandLineFlags();
 
@@ -30,7 +77,6 @@ int main(int argc, char *argv[])
     THFile *weight1_file = THDiskFile_new(FLAGS_weight1_file.c_str(), "r", 0);
     THFile *weight2_file = THDiskFile_new(FLAGS_weight2_file.c_str(), "r", 0);
 
-    int batch_size = FLAGS_batch_size;
     int inp_dim = FLAGS_inp_dim;
     int hidden_dim = FLAGS_hidden_dim;
     int outp_dim = FLAGS_outp_dim;

@@ -16,6 +16,7 @@
 //      information about the dataset in the SDS.h5 file is obtained.
 //
 //      Modified version of: https://support.hdfgroup.org/HDF5/doc/cpplus_RM/examples.html
+//      and: https://support.hdfgroup.org/ftp/HDF5/current/src/unpacked/c++/examples/h5tutr_subset.cpp
 //
 #ifdef OLD_HEADER_FILENAME
 #include <iostream.h>
