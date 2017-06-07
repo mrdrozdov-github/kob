@@ -6,7 +6,7 @@
 #include "gflags/gflags.h"
 
 #define DO_EVAL false
-#define PRINT_SAMPLE false
+#define PRINT_SAMPLE true
 
 using namespace std;
 
@@ -60,9 +60,11 @@ int main(int argc, char *argv[])
     int num_batches = n / batch_size;
     BatchReader batch_reader = BatchReader(filename, datasetname, n, size);
 
-    vector<int> index;
-    for (int i=0; i<n; ++i) index.push_back(i);
-    random_shuffle(index.begin(), index.end());
+    int index[n];
+    for (int i=0; i<n; ++i) {
+        index[i] = i;
+    }
+    random_shuffle(index, index+n);
 
     float batch[batch_size * size];
 
@@ -70,13 +72,12 @@ int main(int argc, char *argv[])
     if (PRINT_SAMPLE) {
         for (int i_batch = 0; i_batch < num_batches; i_batch++) {
             printf("Batch: %d\n", i_batch);
-            vector<int> _index;
-            for (int ii = 0; ii<batch_size; ++ii) {
-                _index.push_back(index[i_batch * batch_size + ii]);
-                batch_reader.read_item(batch + ii * size, _index[ii]);
-                print_mnist(batch + ii * size);
+            batch_reader.read_batch(batch, index + i_batch * batch_size, batch_size);
+            if (i_batch == 0) {
+                for (int ii = 0; ii<batch_size; ++ii) {
+                    print_mnist(batch + ii * size);
+                }
             }
-            break;
         }
     }
 

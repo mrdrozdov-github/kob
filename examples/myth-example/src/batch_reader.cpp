@@ -9,10 +9,11 @@ BatchReader::BatchReader(string filename, string datasetname, int n, int size) {
     this->size = size;
 }
 
-void BatchReader::read_item(float *out, int index) {
-    H5File file(this->filename, H5F_ACC_RDONLY);
-    DataSet dataset = file.openDataSet(this->datasetname);
+void BatchReader::dataset_read(const DataSet &dataset, float *out, const DataSpace &memspace, const DataSpace &dataspace) {
+    dataset.read(out, PredType::NATIVE_FLOAT, memspace, dataspace);
+}
 
+void BatchReader::read_item(float *out, int index, const H5File &file, const DataSet &dataset) {
     hsize_t offset[2], count[2], stride[2], block[2];
     hsize_t dims[2], dimsm[2];
 
@@ -41,10 +42,30 @@ void BatchReader::read_item(float *out, int index) {
 
     // Read data.
     dataspace.selectHyperslab(H5S_SELECT_SET, count, offset, stride, block); 
-    dataset.read(out, PredType::NATIVE_FLOAT, memspace, dataspace);
+    this->dataset_read(dataset, out, memspace, dataspace);
 
     dataspace.close();
     memspace.close();
+}
+
+void BatchReader::read_item(float *out, int index) {
+    H5File file(this->filename, H5F_ACC_RDONLY);
+    DataSet dataset = file.openDataSet(this->datasetname);
+
+    this->read_item(out, index, file, dataset);
+
+    dataset.close();
+    file.close();
+}
+
+void BatchReader::read_batch(float *out, int *index, int batch_size) {
+    H5File file(this->filename, H5F_ACC_RDONLY);
+    DataSet dataset = file.openDataSet(this->datasetname);
+
+    for (int i = 0; i < batch_size; ++i) {
+        this->read_item(out + i * this->size, index[i], file, dataset);
+    }
+
     dataset.close();
     file.close();
 }
