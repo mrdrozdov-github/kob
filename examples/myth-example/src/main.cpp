@@ -6,7 +6,7 @@
 #include "gflags/gflags.h"
 
 #define DO_EVAL false
-#define PRINT_SAMPLE true
+#define PRINT_SAMPLE false
 
 using namespace std;
 
@@ -14,7 +14,7 @@ using namespace std;
 
 TODO:
 
-- [ ] batching
+- [x] batching
 - [ ] don't need to specify data size
 
 */
@@ -33,6 +33,7 @@ DEFINE_int32(hidden_dim, 64, "Data dim");
 DEFINE_int32(outp_dim, 10, "Data dim");
 DEFINE_int32(steps, 1, "Data dim");
 DEFINE_int32(seed, 11, "Random seed");
+DEFINE_int32(epochs, 1, "Number of epochs");
 DEFINE_double(learning_rate, 0.001, "Data dim");
 
 void print_mnist(float *item) {
@@ -58,6 +59,7 @@ int main(int argc, char *argv[])
     int hidden_dim = FLAGS_hidden_dim;
     int outp_dim = FLAGS_outp_dim;
 
+    // Prepare data.
     srand(FLAGS_seed);
 
     string filename = "/Users/Andrew/Developer/kob/examples/h5mnist/train.h5";
@@ -74,182 +76,123 @@ int main(int argc, char *argv[])
     BatchReader batch_reader_labels = BatchReader(filename, "labels", n, 1);
 
     THFloatTensor *batch = THFloatTensor_newWithSize2d(FLAGS_batch_size, size);
-    THLongTensor *labels = THLongTensor_newWithSize1d(FLAGS_batch_size);
+    THLongTensor *target = THLongTensor_newWithSize1d(FLAGS_batch_size);
 
     int index[n];
     for (int i=0; i<n; ++i) {
         index[i] = i;
     }
-    random_shuffle(index, index+n);
+
+    // Prepare model.
+    Linear *linear1 = new Linear(inp_dim, hidden_dim);
+    Linear *linear2 = new Linear(hidden_dim, outp_dim);
+
+    THFile *weight1_file = THDiskFile_new(FLAGS_weight1_file.c_str(), "r", 0);
+    THFile *weight2_file = THDiskFile_new(FLAGS_weight2_file.c_str(), "r", 0);
+
+    printf("Reading linear1\n");
+    readFloat(weight1_file, linear1->weight);
+    printf("Reading linear2\n");
+    readFloat(weight2_file, linear2->weight);
+
+    THFile_free(weight1_file);
+    THFile_free(weight2_file);
+
+    Variable *train_var = new Variable(batch);
+
+    // Forward variables.
+    Variable *inp_linear1;
+    Variable *outp_linear1;
+    Variable *inp_sigm;
+    Variable *outp_sigm;
+    Variable *inp_linear2;
+    Variable *outp_linear2;
+    Variable *inp_softmax;
+    Variable *outp_softmax;
+    Variable *inp_nll;
+    Variable *outp_nll;
+
+    // Backward variables.
+    Variable *grad_nll;
+    Variable *grad_softmax;
+    Variable *grad_linear2;
+    Variable *grad_sigm;
+    Variable *grad_linear1;
 
     // Print sample of data.
     if (PRINT_SAMPLE) {
         for (int i_batch = 0; i_batch < num_batches; i_batch++) {
             printf("Batch: %d\n", i_batch);
-            batch_reader.read_batch(THFloatTensor_data(batch), index + i_batch * batch_size, batch_size, file, dataset_images);
-            batch_reader_labels.read_batch(THLongTensor_data(labels), index + i_batch * batch_size, batch_size, file, dataset_labels);
+            batch_reader.read_batch(THFloatTensor_data(train_var->data), index + i_batch * batch_size, batch_size, file, dataset_images);
+            batch_reader_labels.read_batch(THLongTensor_data(target), index + i_batch * batch_size, batch_size, file, dataset_labels);
             if (i_batch == 0) {
                 for (int ii = 0; ii<batch_size; ++ii) {
-                    printf("Label: %ld\n", THLongTensor_data(labels)[ii]);
-                    print_mnist(THFloatTensor_data(batch) + ii * size);
+                    printf("Label: %ld\n", THLongTensor_data(target)[ii]);
+                    print_mnist(THFloatTensor_data(train_var->data) + ii * size);
                 }
             }
         }
     }
 
+    for (int i_epoch = 0; i_epoch < FLAGS_epochs; ++i_epoch) {
+        // Run one epoch.
+        random_shuffle(index, index+n);
+
+        for (int i_batch = 0; i_batch < num_batches; ++i_batch) {
+            // Prepare batch.
+            batch_reader.read_batch(THFloatTensor_data(train_var->data), index + i_batch * batch_size, batch_size, file, dataset_images);
+            batch_reader_labels.read_batch(THLongTensor_data(target), index + i_batch * batch_size, batch_size, file, dataset_labels);
+
+            // Fix labels.
+            THLongTensor_add(target, target, 1);
+
+            // Forward pass.
+            inp_linear1 = train_var;
+            outp_linear1 = linear1->forward(inp_linear1);
+
+            inp_sigm = outp_linear1;
+            outp_sigm = Sigmoid_forward(inp_sigm);
+
+            inp_linear2 = outp_sigm;
+            outp_linear2 = linear2->forward(inp_linear2);
+
+            inp_softmax = outp_linear2;
+            outp_softmax = LogSoftMax_forward(inp_softmax);
+
+            inp_nll = outp_softmax;
+            outp_nll = NLLLoss_forward(inp_nll, target);
+            printf("[epoch=%d, batch=%d] forward (nll): %f\n", i_epoch, i_batch, THFloatTensor_sumall(outp_nll->data));
+
+            // Backward Pass
+            linear1->clear_grads();
+            linear2->clear_grads();
+
+            // Backward Pass
+            grad_nll = NLLLoss_backward(inp_nll, target);
+            grad_softmax = LogSoftMax_backward(inp_softmax, outp_softmax->data, grad_nll->data);
+            grad_linear2 = linear2->backward(inp_linear2, grad_softmax->data);
+            grad_sigm = Sigmoid_backward(inp_sigm, outp_sigm->data, grad_linear2->data);
+            grad_linear1 = linear1->backward(inp_linear1, grad_sigm->data);
+
+            // Gradient update.
+            THFloatTensor_csub(linear1->weight, linear1->weight, FLAGS_learning_rate, linear1->gradWeight);
+            THFloatTensor_csub(linear2->weight, linear2->weight, FLAGS_learning_rate, linear2->gradWeight);
+
+            delete outp_linear1;
+            delete outp_sigm;
+            delete outp_linear2;
+            delete outp_softmax;
+            delete outp_nll;
+
+            delete grad_nll;
+            delete grad_softmax;
+            delete grad_linear2;
+            delete grad_sigm;
+            delete grad_linear1;
+        }
+    }
+
     return 0;
-
-    // THFile *train_data_file = THDiskFile_new(FLAGS_train_data_file.c_str(), "r", 0);
-    // THFile *train_labels_file = THDiskFile_new(FLAGS_train_labels_file.c_str(), "r", 0);
-    // THFile *eval_data_file = THDiskFile_new(FLAGS_eval_data_file.c_str(), "r", 0);
-    // THFile *eval_labels_file = THDiskFile_new(FLAGS_eval_labels_file.c_str(), "r", 0);
-    // THFile *weight1_file = THDiskFile_new(FLAGS_weight1_file.c_str(), "r", 0);
-    // THFile *weight2_file = THDiskFile_new(FLAGS_weight2_file.c_str(), "r", 0);
-
-    // THFloatTensor *eval_data = THFloatTensor_newWithSize2d(FLAGS_eval_data_size, inp_dim);
-    // THLongTensor *eval_labels = THLongTensor_newWithSize1d(FLAGS_eval_data_size);
-
-    // Linear *linear1 = new Linear(inp_dim, hidden_dim);
-    // Linear *linear2 = new Linear(hidden_dim, outp_dim);
-
-    // // Initialization
-    // printf("Reading data\n");
-    // readFloat(train_data_file, data);
-    // printf("Reading labels\n");
-    // readLong(train_labels_file, labels);
-    // printf("Reading data\n");
-    // readFloat(eval_data_file, eval_data);
-    // printf("Reading labels\n");
-    // readLong(eval_labels_file, eval_labels);
-    // printf("Reading linear1\n");
-    // readFloat(weight1_file, linear1->weight);
-    // printf("Reading linear2\n");
-    // readFloat(weight2_file, linear2->weight);
-
-    // THFile_free(train_data_file);
-    // THFile_free(train_labels_file);
-    // THFile_free(eval_data_file);
-    // THFile_free(eval_labels_file);
-    // THFile_free(weight1_file);
-    // THFile_free(weight2_file);
-
-    // // Fix labels
-    // THLongTensor_add(labels, labels, 1);
-    // THLongTensor_add(eval_labels, eval_labels, 1);
-
-    // // printf("weight1: %f\n", THFloatTensor_sumall(linear1->weight));
-    // // printf("weight1[0]: %f\n", THFloatTensor_data(linear1->weight)[0]);
-    // // printf("weight2: %f\n", THFloatTensor_sumall(linear2->weight));
-    // // printf("weight2[0]: %f\n", THFloatTensor_data(linear2->weight)[0]);
-
-    // Variable *train_var = new Variable(data);
-    // Variable *eval_var = new Variable(eval_data);
-    // THLongTensor *target = labels;
-    // THLongTensor *eval_target = eval_labels;
-    // Variable *inp_linear1;
-    // Variable *outp_linear1;
-    // Variable *inp_sigm;
-    // Variable *outp_sigm;
-    // Variable *inp_linear2;
-    // Variable *outp_linear2;
-    // Variable *inp_softmax;
-    // Variable *outp_softmax;
-    // Variable *inp_nll;
-    // Variable *outp_nll;
-
-    // Variable *grad_nll;
-    // Variable *grad_softmax;
-    // Variable *grad_linear2;
-    // Variable *grad_sigm;
-    // Variable *grad_linear1;
-
-    // for (int step = 0; step < FLAGS_steps; step++) {
-    //     // TODO: Shuffling
-
-    //     // Forward Pass
-    //     // printf("forward (batch)(numel): %td\n", THFloatTensor_nElement(batch_var->data));
-
-    //     inp_linear1 = train_var;
-    //     outp_linear1 = linear1->forward(inp_linear1);
-    //     // printf("forward (linear1)(numel): %td\n", THFloatTensor_nElement(outp_linear1->data));
-    //     // printf("forward (linear1): %f\n", THFloatTensor_sumall(outp_linear1->data));
-
-    //     inp_sigm = outp_linear1;
-    //     outp_sigm = Sigmoid_forward(inp_sigm);
-    //     // printf("forward (sigm)(numel): %td\n", THFloatTensor_nElement(outp_sigm->data));
-    //     // printf("forward (sigm): %f\n", THFloatTensor_sumall(outp_sigm->data));
-
-    //     inp_linear2 = outp_sigm;
-    //     outp_linear2 = linear2->forward(inp_linear2);
-    //     // printf("forward (linear2)(numel): %td\n", THFloatTensor_nElement(outp_linear2->data));
-    //     // printf("forward (linear2): %f\n", THFloatTensor_sumall(outp_linear2->data));
-
-    //     inp_softmax = outp_linear2;
-    //     outp_softmax = LogSoftMax_forward(inp_softmax);
-    //     // printf("forward (softmax)(numel): %td\n", THFloatTensor_nElement(outp_softmax->data));
-    //     // printf("forward (softmax): %f\n", THFloatTensor_sumall(outp_softmax->data));
-
-    //     inp_nll = outp_softmax;
-    //     outp_nll = NLLLoss_forward(inp_nll, target);
-    //     // printf("forward (nll)(numel): %td\n", THFloatTensor_nElement(outp_nll->data));
-    //     printf("[%d] forward (nll): %f\n", step, THFloatTensor_sumall(outp_nll->data));
-
-    //     // Backward Pass
-    //     // THFloatTensor *loss = THFloatTensor_newWithSize2d(batch_size, outp_dim);
-    //     // THFloatTensor_fill(loss, 1.0);
-    //     // THFloatTensor_csub(loss, loss, 1.0, outp_linear2->data);
-    //     // printf("loss: %f\n", THFloatTensor_sumall(loss));
-    //     linear1->clear_grads();
-    //     linear2->clear_grads();
-
-    //     // printf("grads (linear1): %f\n", THFloatTensor_sumall(linear1->gradWeight));
-    //     // printf("grads (linear2): %f\n", THFloatTensor_sumall(linear2->gradWeight));
-    //     // printf("grads (linear1)[0]: %f\n", THFloatTensor_data(linear1->gradWeight)[0]);
-    //     // printf("grads (linear2)[0]: %f\n", THFloatTensor_data(linear2->gradWeight)[0]);
-
-    //     grad_nll = NLLLoss_backward(inp_nll, target);
-    //     // printf("grad (nll): %f\n", THFloatTensor_sumall(grad_nll->data));
-    //     // printf("grad (nll)(numel): %td\n", THFloatTensor_nElement(grad_nll->data));
-
-    //     grad_softmax = LogSoftMax_backward(inp_softmax, outp_softmax->data, grad_nll->data);
-    //     // printf("grad (softmax): %f\n", THFloatTensor_sumall(grad_softmax->data));
-    //     // printf("grad (softmax)(numel): %td\n", THFloatTensor_nElement(grad_softmax->data));
-
-    //     grad_linear2 = linear2->backward(inp_linear2, grad_softmax->data);
-    //     // printf("grad (linear2): %f\n", THFloatTensor_sumall(grad_linear2->data));
-    //     // printf("grad (linear2)(numel): %td\n", THFloatTensor_nElement(grad_linear2->data));
-
-    //     grad_sigm = Sigmoid_backward(inp_sigm, outp_sigm->data, grad_linear2->data);
-    //     // printf("grad (sigm): %f\n", THFloatTensor_sumall(grad_sigm->data));
-    //     // printf("grad (sigm)(numel): %td\n", THFloatTensor_nElement(grad_sigm->data));
-
-    //     grad_linear1 = linear1->backward(inp_linear1, grad_sigm->data);
-    //     // printf("grad (linear1): %f\n", THFloatTensor_sumall(grad_linear1->data));
-    //     // printf("grad (linear1)(numel): %td\n", THFloatTensor_nElement(grad_linear1->data));
-
-    //     // printf("grads (linear1): %f\n", THFloatTensor_sumall(linear1->gradWeight));
-    //     // printf("grads (linear1)[0]: %f\n", THFloatTensor_data(linear1->gradWeight)[0]);
-    //     // printf("grads (linear2): %f\n", THFloatTensor_sumall(linear2->gradWeight));
-    //     // printf("grads (linear2)[0]: %f\n", THFloatTensor_data(linear2->gradWeight)[0]);
-
-    //     THFloatTensor_csub(linear1->weight, linear1->weight, FLAGS_learning_rate, linear1->gradWeight);
-    //     THFloatTensor_csub(linear2->weight, linear2->weight, FLAGS_learning_rate, linear2->gradWeight);
-    //     // printf("weight1: %f\n", THFloatTensor_sumall(linear1->weight));
-    //     // printf("weight1[0]: %f\n", THFloatTensor_data(linear1->weight)[0]);
-    //     // printf("weight2: %f\n", THFloatTensor_sumall(linear2->weight));
-    //     // printf("weight2[0]: %f\n", THFloatTensor_data(linear2->weight)[0]);
-
-    //     delete outp_linear1;
-    //     delete outp_sigm;
-    //     delete outp_linear2;
-    //     delete outp_softmax;
-    //     delete outp_nll;
-
-    //     delete grad_nll;
-    //     delete grad_softmax;
-    //     delete grad_linear2;
-    //     delete grad_sigm;
-    //     delete grad_linear1;
 
     //     // Eval
     //     if (DO_EVAL) {
