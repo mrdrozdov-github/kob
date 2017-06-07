@@ -8,6 +8,8 @@
 #define DO_EVAL false
 #define PRINT_SAMPLE false
 
+using namespace std;
+
 /*
 
 TODO:
@@ -25,7 +27,7 @@ DEFINE_string(weight1_file, "w1", "Data file");
 DEFINE_string(weight2_file, "w2", "Data file");
 DEFINE_int32(data_size, 100, "Data dim");
 DEFINE_int32(eval_data_size, 100, "Data dim");
-DEFINE_int32(batch_size, 32, "Data dim");
+DEFINE_int32(batch_size, 100, "Data dim");
 DEFINE_int32(inp_dim, 784, "Data dim");
 DEFINE_int32(hidden_dim, 64, "Data dim");
 DEFINE_int32(outp_dim, 10, "Data dim");
@@ -48,20 +50,33 @@ void print_mnist(float *item) {
 
 int main(int argc, char *argv[])
 {
+    srand(unsigned(time(0)));
+
     string filename = "/Users/Andrew/Developer/kob/examples/h5mnist/train.h5";
     string datasetname = "images";
     int n = 55000;
     int size = 784;
     int batch_size = FLAGS_batch_size;
+    int num_batches = n / batch_size;
     BatchReader batch_reader = BatchReader(filename, datasetname, n, size);
+
+    vector<int> index;
+    for (int i=0; i<n; ++i) index.push_back(i);
+    random_shuffle(index.begin(), index.end());
 
     float batch[batch_size * size];
 
     // Print sample of data.
     if (PRINT_SAMPLE) {
-        for (int i = 0; i < 3; i++) {
-            batch_reader.read_item(batch + i * size, i);
-            print_mnist(batch + i * size);
+        for (int i_batch = 0; i_batch < num_batches; i_batch++) {
+            printf("Batch: %d\n", i_batch);
+            vector<int> _index;
+            for (int ii = 0; ii<batch_size; ++ii) {
+                _index.push_back(index[i_batch * batch_size + ii]);
+                batch_reader.read_item(batch + ii * size, _index[ii]);
+                print_mnist(batch + ii * size);
+            }
+            break;
         }
     }
 
