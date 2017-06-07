@@ -16,6 +16,13 @@ TODO:
 
 - [x] batching
 - [ ] don't need to specify data size
+- [ ] pretty logging (w. timestamps)
+- [ ] protobuf for statistics
+- [ ] evaluation interval
+- [ ] benchmark against pytorch (accuracy/loss)
+- [ ] benchmark against pytorch (speed)
+- [ ] log accuracy
+- [ ] weight initialization
 
 */
 
@@ -33,7 +40,7 @@ DEFINE_int32(hidden_dim, 64, "Data dim");
 DEFINE_int32(outp_dim, 10, "Data dim");
 DEFINE_int32(steps, 1, "Data dim");
 DEFINE_int32(seed, 11, "Random seed");
-DEFINE_int32(epochs, 1, "Number of epochs");
+DEFINE_int32(epochs, 10, "Number of epochs");
 DEFINE_double(learning_rate, 0.001, "Data dim");
 
 void print_mnist(float *item) {
