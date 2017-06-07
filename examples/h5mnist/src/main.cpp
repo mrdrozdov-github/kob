@@ -39,7 +39,7 @@ const int   RANK = 2;
 int main (void)
 {
   int i, j, k;
-  float *data_out = new float[NX * NY];
+  float data_out[_NZ][NY];
 
   // Initialize output buffer.
   for (k = 0; k < _NZ; k++)
@@ -48,7 +48,8 @@ int main (void)
     {
       for (i = 0; i < _NX; i++)
       {
-        cout << data_out[k*NY + j*_NY + i] << " ";
+        data_out[k*NY][j*_NY + i] = 0;
+        cout << data_out[k*NY][j*_NY + i] << " ";
       }
       cout << endl;
     }
@@ -59,15 +60,42 @@ int main (void)
   H5File file(FILE_NAME, H5F_ACC_RDONLY);
   DataSet dataset = file.openDataSet(DATASET_NAME);
 
-  // Get dataset dims.
-  DataSpace filespace = dataset.getSpace();
-  int rank = filespace.getSimpleExtentNdims();
-  hsize_t dims[2];
-  rank = filespace.getSimpleExtentDims(dims);
-  DataSpace mspace(RANK, dims);
+  // Read subset of data.
+  hsize_t offset[2], count[2], stride[2], block[2];
+  hsize_t dims[2], dimsm[2];
+
+  offset[0] = 1; // TODO: Change this to access different elements in the array!
+  offset[1] = 0;
+
+  int NUM_BLOCKS = 1;
+  int DIM0_SUB = 1;
+  int DIM1_SUB = 784;
+
+  dims[0] = 55000; // Num images.
+  dims[1] = 784; // Size of image.
+
+  count[0]  = DIM0_SUB;
+  count[1]  = DIM1_SUB;
+
+  stride[0] = 1;
+  stride[1] = 1;
+
+  block[0] = NUM_BLOCKS;
+  block[1] = 1;
+
+  // Define Memory Dataspace. Get file dataspace and select
+  // a subset from the file dataspace.
+
+  dimsm[0] = DIM0_SUB;
+  dimsm[1] = DIM1_SUB;
+
+  DataSpace dataspace = DataSpace(RANK, dims);
+  DataSpace memspace(RANK, dimsm, NULL);
+
+  dataspace.selectHyperslab(H5S_SELECT_SET, count, offset, stride, block); 
 
   // Read data.
-  dataset.read(data_out, PredType::NATIVE_FLOAT, mspace, filespace);
+  dataset.read(data_out, PredType::NATIVE_FLOAT, memspace, dataspace);
 
   // Print sample.
   for (k = 0; k < _NZ; k++)
@@ -76,7 +104,7 @@ int main (void)
     {
       for (i = 0; i < _NX; i++)
       {
-        cout << ceil(data_out[k*NY + j*_NY + i]) << " ";
+        cout << ceil(data_out[k*NY][j*_NY + i]) << " ";
       }
       cout << endl;
     }
