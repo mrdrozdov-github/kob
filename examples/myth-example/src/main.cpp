@@ -17,11 +17,12 @@ TODO:
 - [ ] don't need to specify data size
 - [ ] pretty logging (w. timestamps)
 - [ ] protobuf for statistics
-- [ ] evaluation interval
+- [x] evaluation
 - [ ] benchmark against pytorch (accuracy/loss)
 - [ ] benchmark against pytorch (speed)
-- [ ] log accuracy
+- [x] log accuracy in eval
 - [ ] weight initialization
+- [ ] auto-backward
 
 */
 
@@ -42,6 +43,7 @@ DEFINE_int32(seed, 11, "Random seed");
 DEFINE_int32(epochs, 10, "Number of epochs");
 DEFINE_double(learning_rate, 0.001, "Data dim");
 DEFINE_bool(run_eval, false, "Run eval once per epoch");
+DEFINE_bool(verbose, false, "Verbose");
 
 void print_mnist(float *item) {
     int size = 28;
@@ -60,6 +62,7 @@ void print_mnist(float *item) {
 void run_eval(Linear *linear1, Linear *linear2) {
     string filename = "/Users/Andrew/Developer/kob/examples/h5mnist/test.h5";
     int n = 10000;
+    int correct = 0;
     int size = FLAGS_inp_dim;
     int batch_size = FLAGS_batch_size;
     int num_batches = n / batch_size;
@@ -82,8 +85,8 @@ void run_eval(Linear *linear1, Linear *linear2) {
     Variable *outp_linear2;
     Variable *inp_softmax;
     Variable *outp_softmax;
-    Variable *inp_nll;
-    Variable *outp_nll;
+    pair<Variable *, THLongTensor *> outp_max;
+    THLongTensor *outp_eq;
 
     Variable *var = new Variable(batch);
 
@@ -107,21 +110,24 @@ void run_eval(Linear *linear1, Linear *linear2) {
         inp_linear2 = outp_sigm;
         outp_linear2 = linear2->forward(inp_linear2);
         inp_softmax = outp_linear2;
-        outp_softmax = LogSoftMax_forward(inp_softmax);
-        inp_nll = outp_softmax;
-        outp_nll = NLLLoss_forward(inp_nll, target);
+        outp_softmax = SoftMax_forward(inp_softmax);
+        outp_max = t_Max(outp_softmax, 1);
 
-        printf("Eval: [%d/%d (%.0f%%)]\tLoss: %.6f\n",
-        i_batch * batch_size, n,
-        100. * i_batch / num_batches, THFloatTensor_sumall(outp_nll->data));
+        THLongTensor_sub(target, target, 1);
+        outp_eq = t_Equal(target, outp_max.second);
+
+        correct += THLongTensor_sumall(outp_eq);
+
     }
-
+    printf("Eval: Correct: %d\n", correct);
 
     delete outp_linear1;
     delete outp_sigm;
     delete outp_linear2;
     delete outp_softmax;
-    delete outp_nll;
+    delete outp_max.first;
+    delete outp_max.second;
+    delete outp_eq;
 }
 
 int main(int argc, char *argv[])
@@ -235,10 +241,11 @@ int main(int argc, char *argv[])
 
             inp_nll = outp_softmax;
             outp_nll = NLLLoss_forward(inp_nll, target);
-            // printf("[epoch=%d, batch=%d] forward (nll): %f\n", i_epoch, i_batch, THFloatTensor_sumall(outp_nll->data));
-            printf("Train Epoch: %d [%d/%d (%.0f%%)]\tLoss: %.6f\n",
-                i_epoch, i_batch * batch_size, n,
-                100. * i_batch / num_batches, THFloatTensor_sumall(outp_nll->data));
+            if (FLAGS_verbose) {
+                printf("Train Epoch: %d [%d/%d (%.0f%%)]\tLoss: %.6f\n",
+                    i_epoch, i_batch * batch_size, n,
+                    100. * i_batch / num_batches, THFloatTensor_sumall(outp_nll->data));
+            }
 
             // Backward Pass
             linear1->clear_grads();
@@ -274,28 +281,4 @@ int main(int argc, char *argv[])
     }
 
     return 0;
-
-    //     // Eval
-    //     if (DO_EVAL) {
-    //         inp_linear1 = eval_var;
-    //         outp_linear1 = linear1->forward(inp_linear1);
-    //         inp_sigm = outp_linear1;
-    //         outp_sigm = Sigmoid_forward(inp_sigm);
-    //         inp_linear2 = outp_sigm;
-    //         outp_linear2 = linear2->forward(inp_linear2);
-    //         inp_softmax = outp_linear2;
-    //         outp_softmax = LogSoftMax_forward(inp_softmax);
-    //         inp_nll = outp_softmax;
-    //         outp_nll = NLLLoss_forward(inp_nll, eval_target);
-    //         printf("[%d] eval (nll): %f\n", step, THFloatTensor_sumall(outp_nll->data));
-
-    //         delete outp_linear1;
-    //         delete outp_sigm;
-    //         delete outp_linear2;
-    //         delete outp_softmax;
-    //         delete outp_nll;
-    //     }
-    // }
-
-    // return 0;
 }

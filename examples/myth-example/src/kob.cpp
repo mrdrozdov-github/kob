@@ -175,6 +175,44 @@ Variable * LogSoftMax_backward(Variable *x, THFloatTensor *output, THFloatTensor
     return result;
 }
 
+Variable * SoftMax_forward(Variable *x) {
+    long batch_size = x->data->size[0];
+    long dim_size = x->data->size[1];
+
+    THFloatTensor *input = x->data;
+    THFloatTensor *output = THFloatTensor_newWithSize2d(batch_size, dim_size);
+    THFloatTensor_zero(output);
+    THNNState *state = NULL;
+
+    THNN_FloatSoftMax_updateOutput(
+          state,
+          input,
+          output);
+
+    Variable *result = new Variable(output);
+    return result;
+}
+
+Variable * SoftMax_backward(Variable *x, THFloatTensor *output, THFloatTensor *gradOutput) {
+    long batch_size = x->data->size[0];
+    long dim_size = x->data->size[1];
+
+    THFloatTensor *input = x->data;
+    THFloatTensor *gradInput = THFloatTensor_newWithSize2d(batch_size, dim_size);
+    THNNState *state = NULL;
+    THFloatTensor_zero(gradInput);
+
+    THNN_FloatSoftMax_updateGradInput(
+          state,
+          input,
+          gradOutput,
+          gradInput,
+          output);
+
+    Variable *result = new Variable(gradInput);
+    return result;
+}
+
 Variable * NLLLoss_forward(Variable *x, THLongTensor *target) {
     long batch_size = x->data->size[0];
     long dim_size = x->data->size[1];
@@ -234,6 +272,30 @@ Variable * NLLLoss_backward(Variable *x, THLongTensor *target) {
     Variable *result = new Variable(gradInput);
     return result;
 }
+
+// Non-differentiable.
+
+pair<Variable *, THLongTensor *> t_Max(Variable *x, int dimension) {
+    THFloatTensor *data = x->data;
+    THFloatTensor *_values = THFloatTensor_newWithSize2d(data->size[0], 1);
+    THLongTensor *indices = THLongTensor_newWithSize2d(data->size[0], 1);
+    int keepdim = 1;
+
+    THFloatTensor_max(_values, indices, data, dimension, keepdim);
+
+    Variable *values = new Variable(_values);
+    pair<Variable *, THLongTensor *> result = make_pair(values, indices);
+
+    return result;
+}
+
+THLongTensor * t_Equal(THLongTensor *x, THLongTensor *y) {
+    THLongTensor *result = THLongTensor_newWithSize2d(x->size[0], y->size[1]);
+    THLongTensor_eqTensorT(result, x, y);
+    return result;
+}
+
+// Utility.
 
 void readFloat(THFile *file, THFloatTensor *tensor) {
     THLongStorage *size = THFloatTensor_newSizeOf(tensor);

@@ -27,7 +27,7 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='enables CUDA training')
 parser.add_argument('--seed', type=int, default=11, metavar='S',
                     help='random seed (default: 11)')
-parser.add_argument('--run-eval', type=bool, default=False,
+parser.add_argument('--run-eval', action='store_true', default=False,
                     help='run eval or not')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -42,13 +42,13 @@ train_loader = torch.utils.data.DataLoader(
     datasets.MNIST('../data', train=True, download=True,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
-                       # transforms.Normalize((0.1307,), (0.3081,))
+                       transforms.Normalize((0.1307,), (0.3081,))
                    ])),
     batch_size=args.batch_size, shuffle=True, **kwargs)
 test_loader = torch.utils.data.DataLoader(
     datasets.MNIST('../data', train=False, transform=transforms.Compose([
                        transforms.ToTensor(),
-                       # transforms.Normalize((0.1307,), (0.3081,))
+                       transforms.Normalize((0.1307,), (0.3081,))
                    ])),
     batch_size=args.batch_size, shuffle=False, **kwargs)
 
@@ -58,9 +58,6 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.fc1 = nn.Linear(784, 64, bias=False)
         self.fc2 = nn.Linear(64, 10, bias=False)
-
-        self.fc1.weight.data.uniform_()
-        self.fc2.weight.data.uniform_()
 
     def forward(self, x):
         x = x.view(-1, 784)
@@ -83,7 +80,7 @@ def train(epoch):
         data, target = Variable(data), Variable(target)
         optimizer.zero_grad()
         output = model(data)
-        loss = F.nll_loss(output, target)
+        loss = nn.NLLLoss()(output, target)
         loss.backward()
         optimizer.step()
         print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(

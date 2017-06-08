@@ -1,5 +1,8 @@
+#include <utility>
 #include "TH/TH.h"
 #include "THNN/THNN.h"
+
+using namespace std;
 
 class Variable;
 class Linear;
@@ -47,8 +50,14 @@ Variable * Sigmoid_forward(Variable *x);
 Variable * Sigmoid_backward(Variable *x, THFloatTensor *output, THFloatTensor *gradOutput);
 Variable * LogSoftMax_forward(Variable *x);
 Variable * LogSoftMax_backward(Variable *x, THFloatTensor *output, THFloatTensor *gradOutput);
+Variable * SoftMax_forward(Variable *x);
+Variable * SoftMax_backward(Variable *x, THFloatTensor *output, THFloatTensor *gradOutput);
 Variable * NLLLoss_forward(Variable *x, THLongTensor *target);
 Variable * NLLLoss_backward(Variable *x, THLongTensor *target);
+
+// Non-differentiable.
+pair<Variable *, THLongTensor *> t_Max(Variable *x, int dimension);
+THLongTensor * t_Equal(THLongTensor *x, THLongTensor *y);
 
 void readFloat(THFile *file, THFloatTensor *tensor);
 void readLong(THFile *file, THLongTensor *tensor);
