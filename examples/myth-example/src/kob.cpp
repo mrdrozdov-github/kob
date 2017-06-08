@@ -1,11 +1,46 @@
 #include "kob.h"
 
 Variable::Variable(THFloatTensor *x) {
+    this->parent_backward = nullptr;
+    this->parent_linear = nullptr;
+    this->parent_input = nullptr;
     this->data = x;
 }
 
 Variable::~Variable() {
     THFloatTensor_free(this->data);
+}
+
+Variable * Variable::recursive_backward(Variable *gradInput) {
+    // Recursively call backward on all Variables.
+    if (this->parent_input->parent_backward != nullptr) {
+        gradInput = this->parent_input->backward(gradInput);
+        THFloatTensor_free(gradInput->data);
+    } else if (this->parent_input->parent_linear != nullptr) {
+        gradInput = this->parent_input->backward(gradInput);
+        THFloatTensor_free(gradInput->data);
+    }
+
+    return gradInput;
+}
+
+Variable * Variable::backward(Variable *gradOutput) {
+    Variable *gradInput;
+    if (this->parent_backward != nullptr) {
+        gradInput = this->parent_backward(this->parent_input, this->data, gradOutput->data);
+        THFloatTensor_free(this->data);
+    }
+    else if (this->parent_linear != nullptr) {
+        gradInput = this->parent_linear->backward(this->parent_input, gradOutput->data);
+        THFloatTensor_free(this->data);
+    }
+    return this->recursive_backward(gradInput);
+}
+
+Variable * Variable::backward() {
+    Variable *gradInput = this->parent_backward_loss(this->parent_input, this->parent_target);
+    THFloatTensor_free(this->data);
+    return this->recursive_backward(gradInput);
 }
 
 Linear::Linear(int inpDim, int outpDim) {
@@ -24,6 +59,13 @@ Linear::Linear(int inpDim, int outpDim) {
 void Linear::clear_grads() {
     THFloatTensor_zero(this->gradWeight);
     // THFloatTensor_zero(this->gradBias);
+}
+
+Variable * Linear::call(Variable *x) {
+    Variable *result = this->forward(x);
+    result->parent_input = x;
+    result->parent_linear = this;
+    return result;
 }
 
 Variable * Linear::forward(Variable *x) {
@@ -99,6 +141,13 @@ Variable * Linear::backward(Variable *x, THFloatTensor *gradOutput) {
     return result;
 }
 
+Variable * F_sigmoid(Variable *x) {
+    Variable *result = Sigmoid_forward(x);
+    result->parent_input = x;
+    result->parent_backward = Sigmoid_backward;
+    return result;
+}
+
 Variable * Sigmoid_forward(Variable *x) {
     long batch_size = x->data->size[0];
     long dim_size = x->data->size[1];
@@ -134,6 +183,13 @@ Variable * Sigmoid_backward(Variable *x, THFloatTensor *output, THFloatTensor *g
           output);
 
     Variable *result = new Variable(gradInput);
+    return result;
+}
+
+Variable * F_log_softmax(Variable *x) {
+    Variable *result = LogSoftMax_forward(x);
+    result->parent_input = x;
+    result->parent_backward = LogSoftMax_backward;
     return result;
 }
 
@@ -210,6 +266,14 @@ Variable * SoftMax_backward(Variable *x, THFloatTensor *output, THFloatTensor *g
           output);
 
     Variable *result = new Variable(gradInput);
+    return result;
+}
+
+Variable * F_nll(Variable *x, THLongTensor *target) {
+    Variable *result = NLLLoss_forward(x, target);
+    result->parent_input = x;
+    result->parent_target = target;
+    result->parent_backward_loss = NLLLoss_backward;
     return result;
 }
 
