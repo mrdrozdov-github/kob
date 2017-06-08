@@ -1,4 +1,4 @@
-TARGET="./mnist"
+TARGET="./demo"
 CC=g++
 LINK=-lTH -lTHNN /usr/local/lib/libgflags.a -lhdf5 -lhdf5_cpp
 OPT=-std=c++11 -g -v
@@ -19,6 +19,6 @@ makefile.depend:
 	g++ -MM -MG $(SRC) $(OPT) $(LINK) > makefile.depend
 
 clean:
-	rm ./mnist
+	rm ./demo
 
 -include makefile.depend
