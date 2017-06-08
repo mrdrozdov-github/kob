@@ -22,7 +22,9 @@ TODO:
 - [ ] benchmark against pytorch (speed)
 - [x] log accuracy in eval
 - [ ] weight initialization
-- [ ] auto-backward
+- [x] auto-backward
+- [ ] auto-backward should generalize to different types of layers. create a generic layer/module class.
+- [ ] optionally use pre-allocated tensor for functions. might be easier with generic class?
 
 */
 
