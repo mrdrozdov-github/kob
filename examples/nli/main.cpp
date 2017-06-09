@@ -36,12 +36,27 @@ int main(int argc, char *argv[])
     /* Get datatype for dataset */
     DataType dtype = dataset.getDataType();
 
-    char *rdata[SPACE1_DIM1];
+    char *rdata[1];
 
     printf("Reading...\n");
 
+    hsize_t offset[1], count[1], stride[1], block[1];
+    hsize_t dims[1], dimsm[1];
+
+    dims[0] = SPACE1_DIM1;
+    dimsm[0] = 1;
+
+    offset[0] = 10; // NOTE: Change this to select different elements in the dataset.
+    count[0] = 1;
+    stride[0] = 1;
+    block[0] = 1;
+
+    DataSpace dataspace = DataSpace(SPACE1_RANK, dims);
+    DataSpace memspace(SPACE1_RANK, dimsm, NULL);
+
     /* Read dataset from disk */
-    dataset.read((void*)rdata, dtype);
+    dataspace.selectHyperslab(H5S_SELECT_SET, count, offset, stride, block); 
+    dataset.read((void*)rdata, dtype, memspace, dataspace);
 
     /* Validate and print data read in */
     cout << "data read:" << endl;
@@ -74,6 +89,7 @@ int main(int argc, char *argv[])
     /* Free memory for rdata */
     for(unsigned i=0; i<SPACE1_DIM1; i++) {
         free(rdata[i]);
+        break;
     }
 
     dataset.close();
