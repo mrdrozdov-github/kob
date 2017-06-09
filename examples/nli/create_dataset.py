@@ -71,24 +71,6 @@ def load_data(path):
             (example.sentence2_tokens, example.sentence2_transitions) = convert_binary_bracketing(
                 loaded_example["sentence2_binary_parse"])
 
-            # # tokens
-            # example.sentence1_tokens_offset = tokens_offset
-            # example.sentence1_tokens_length = len(example.sentence1_tokens)
-            # tokens_offset += example.sentence1_tokens_length
-
-            # example.sentence2_tokens_offset = tokens_offset
-            # example.sentence2_tokens_length = len(example.sentence2_tokens)
-            # tokens_offset += example.sentence2_tokens_length
-
-            # # parses
-            # example.sentence1_transitions_offset = transitions_offset
-            # example.sentence1_transitions_length = len(example.sentence1_transitions)
-            # transitions_offset += example.sentence1_transitions_length
-
-            # example.sentence2_transitions_offset = transitions_offset
-            # example.sentence2_transitions_length = len(example.sentence2_transitions)
-            # transitions_offset += example.sentence2_transitions_length
-
             examples.append(example)
     return examples
 
@@ -102,7 +84,8 @@ if __name__ == '__main__':
     f = h5py.File('nli.h5', 'w')
     f.create_dataset("labels", data=np.asarray(map(lambda x: x.label, data), dtype=np.int32))
     f.create_dataset("example_id", data=np.asarray(map(lambda x: x.example_id, data), dtype=np.int32))
-    dset = f.create_dataset("sentence1_tokens", data=map(lambda x: json.dumps(x.sentence1_tokens), data), dtype=dt_vlen_str)
+    f.create_dataset("sentence1_tokens", data=map(lambda x: json.dumps(x.sentence1_tokens), data), dtype=dt_vlen_str)
+    f.create_dataset("sentence1_transitions", data=map(lambda x: json.dumps(x.sentence1_transitions), data), dtype=dt_vlen_str)
 
     # TODO: Flatten tokens and transitionss.
 

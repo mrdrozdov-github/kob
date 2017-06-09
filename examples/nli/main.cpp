@@ -24,21 +24,10 @@ TODO:
 
 DEFINE_string(train_file, "nli.h5", "Data file");
 
-int main(int argc, char *argv[])
+void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _offset)
 {
-    gflags::ParseCommandLineFlags(&argc, &argv, true);
-    gflags::ShutDownCommandLineFlags();
-
-
-    H5File file(FLAGS_train_file, H5F_ACC_RDONLY);
-    DataSet dataset = file.openDataSet("sentence1_tokens");
-
     /* Get datatype for dataset */
     DataType dtype = dataset.getDataType();
-
-    char *rdata[1];
-
-    printf("Reading...\n");
 
     hsize_t offset[1], count[1], stride[1], block[1];
     hsize_t dims[1], dimsm[1];
@@ -46,7 +35,7 @@ int main(int argc, char *argv[])
     dims[0] = SPACE1_DIM1;
     dimsm[0] = 1;
 
-    offset[0] = 10; // NOTE: Change this to select different elements in the dataset.
+    offset[0] = _offset; // NOTE: Change this to select different elements in the dataset.
     count[0] = 1;
     stride[0] = 1;
     block[0] = 1;
@@ -56,43 +45,45 @@ int main(int argc, char *argv[])
 
     /* Read dataset from disk */
     dataspace.selectHyperslab(H5S_SELECT_SET, count, offset, stride, block); 
-    dataset.read((void*)rdata, dtype, memspace, dataspace);
+    dataset.read(out, dtype, memspace, dataspace);
+}
 
-    /* Validate and print data read in */
-    cout << "data read:" << endl;
-    for(unsigned i=0; i<SPACE1_DIM1; i++) {
-        cout << rdata[i] << endl;
-        cout << rdata[i][0] << endl;
-        cout << rdata[i][1] << endl;
-        cout << rdata[i][2] << endl;
-        string sample = rdata[i];
-        cout << sample << endl;
-        cout << endl;
-        break;
-    }
-    for(unsigned i=0; i<SPACE1_DIM1; i++) {
-        printf("Deserializing\n");
-        string sample = rdata[i];
-        auto j3 = json::parse(sample);
-        printf("Printing\n");
-        cout << j3.dump() << endl;
-        cout << j3[0] << endl;
-        string j3_sample = j3[0];
-        cout << j3_sample << endl;
-        cout << j3_sample[0] << endl;
-        cout << j3[1] << endl;
-        cout << j3[2] << endl;
-        cout << endl;
-        break;
-    }
+int main(int argc, char *argv[])
+{
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
+    gflags::ShutDownCommandLineFlags();
 
-    /* Free memory for rdata */
-    for(unsigned i=0; i<SPACE1_DIM1; i++) {
-        free(rdata[i]);
-        break;
-    }
+    int offset = 13;
+    H5File file(FLAGS_train_file, H5F_ACC_RDONLY);
 
-    dataset.close();
+    // Tokens example.
+    DataSet tokens_dataset = file.openDataSet("sentence1_tokens");
+    char *tokens_data[1];
+    read_variable_length_data(file, tokens_dataset, tokens_data, offset);
+
+    string tokens_string = tokens_data[0];
+    auto tokens_json = json::parse(tokens_string);
+    cout << tokens_json << endl;
+    string tokens_sample = tokens_json[0];
+    cout << tokens_sample << endl;
+
+    free(tokens_data[0]);
+    tokens_dataset.close();
+
+    // Tokens example.
+    DataSet transitions_dataset = file.openDataSet("sentence1_transitions");
+    char *transitions_data[1];
+    read_variable_length_data(file, transitions_dataset, transitions_data, offset);
+
+    string transitions_string = transitions_data[0];
+    auto transitions_json = json::parse(transitions_string);
+    cout << transitions_json << endl;
+    int transitions_sample = transitions_json[0];
+    cout << transitions_sample << endl;
+
+    free(transitions_data[0]);
+    transitions_dataset.close();
+
     file.close();
 
     return 0;
