@@ -48,13 +48,9 @@ void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _o
     dataset.read(out, dtype, memspace, dataspace);
 }
 
-int main(int argc, char *argv[])
+void tokens_example(H5File &file)
 {
-    gflags::ParseCommandLineFlags(&argc, &argv, true);
-    gflags::ShutDownCommandLineFlags();
-
     int offset = 13;
-    H5File file(FLAGS_train_file, H5F_ACC_RDONLY);
 
     // Tokens example.
     DataSet tokens_dataset = file.openDataSet("sentence1_tokens");
@@ -69,8 +65,13 @@ int main(int argc, char *argv[])
 
     free(tokens_data[0]);
     tokens_dataset.close();
+}
 
-    // Tokens example.
+void transitions_example(H5File &file)
+{
+    int offset = 13;
+
+    // Transitions example.
     DataSet transitions_dataset = file.openDataSet("sentence1_transitions");
     char *transitions_data[1];
     read_variable_length_data(file, transitions_dataset, transitions_data, offset);
@@ -83,6 +84,17 @@ int main(int argc, char *argv[])
 
     free(transitions_data[0]);
     transitions_dataset.close();
+}
+
+int main(int argc, char *argv[])
+{
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
+    gflags::ShutDownCommandLineFlags();
+
+    H5File file(FLAGS_train_file, H5F_ACC_RDONLY);
+
+    tokens_example(file);
+    transitions_example(file);
 
     file.close();
 
