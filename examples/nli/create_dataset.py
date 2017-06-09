@@ -86,6 +86,8 @@ if __name__ == '__main__':
     f.create_dataset("example_id", data=np.asarray(map(lambda x: x.example_id, data), dtype=np.int32))
     f.create_dataset("sentence1_tokens", data=map(lambda x: json.dumps(x.sentence1_tokens), data), dtype=dt_vlen_str)
     f.create_dataset("sentence1_transitions", data=map(lambda x: json.dumps(x.sentence1_transitions), data), dtype=dt_vlen_str)
+    f.create_dataset("sentence2_tokens", data=map(lambda x: json.dumps(x.sentence2_tokens), data), dtype=dt_vlen_str)
+    f.create_dataset("sentence2_transitions", data=map(lambda x: json.dumps(x.sentence2_transitions), data), dtype=dt_vlen_str)
 
     # TODO: Flatten tokens and transitionss.
 
