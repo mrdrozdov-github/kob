@@ -94,9 +94,22 @@ void transitions_example(H5File &file)
     transitions_dataset.close();
 }
 
-void tokenize_example(H5File &file)
+map<string, int> tokenize_example(H5File &file)
 {
+    /*
+
+    $ ./demo -input_file dev_matched.h5
+    2017-06-09 16:40:49 DEBUG [tokenize_example] [main.cpp:102] Tokenizing.
+    2017-06-09 16:40:50 DEBUG [tokenize_example] [main.cpp:130] Done tokenizing.
+
+    $ ./demo -input_file train.h5
+    2017-06-09 16:40:52 DEBUG [tokenize_example] [main.cpp:102] Tokenizing.
+    2017-06-09 16:41:27 DEBUG [tokenize_example] [main.cpp:130] Done tokenizing.
+
+    */
+
     map<string, int> token_to_index;
+    int next_index = 0;
 
     LOGDEBUG("Tokenizing.");
 
@@ -111,12 +124,17 @@ void tokenize_example(H5File &file)
         read_variable_length_data(file, tokens_dataset, tokens_data, offset);
         string tokens_string = tokens_data[0];
         auto tokens_json = json::parse(tokens_string);
-        // cout << tokens_json << endl;
-        // cout << tokens_json.size() << endl;
         for (int j = 0; j < tokens_json.size(); j++)
         {
             string tokens_sample = tokens_json[j];
-            // cout << tokens_sample << endl;
+            map<string, int>::iterator it = token_to_index.find(tokens_sample);
+            if (it != token_to_index.end())
+            {
+                // pass
+            } else {
+                token_to_index.insert(pair<string,int>(tokens_sample, next_index));
+                next_index++;
+            }
         }
         free(tokens_data[0]);
     }
@@ -124,6 +142,8 @@ void tokenize_example(H5File &file)
     LOGDEBUG("Done tokenizing.");
 
     tokens_dataset.close();
+
+    return token_to_index;
 }
 
 int main(int argc, char *argv[])
