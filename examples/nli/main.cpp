@@ -1,16 +1,16 @@
 #include <math.h>
 #include <iostream>
+#include <map>
 
 #include "../../kob/kob.h"
 #include "../../kob/batch_reader.h"
+#include "../../kob/logging.h"
 #include "H5Cpp.h"
 #include "gflags/gflags.h"
 
 #include "json.hpp"
 
-#define PRINT_SAMPLE false
 
-#define SPACE1_DIM1 9815
 #define SPACE1_RANK 1
 
 using namespace std;
@@ -22,7 +22,7 @@ TODO:
 
 */
 
-DEFINE_string(train_file, "nli.h5", "Data file");
+DEFINE_string(input_file, "train.h5", "Data file");
 
 void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _offset)
 {
@@ -32,7 +32,8 @@ void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _o
     hsize_t offset[1], count[1], stride[1], block[1];
     hsize_t dims[1], dimsm[1];
 
-    dims[0] = SPACE1_DIM1;
+    int num_tokens = dataset.getSpace().getSelectNpoints();
+    dims[0] = num_tokens;
     dimsm[0] = 1;
 
     offset[0] = _offset; // NOTE: Change this to select different elements in the dataset.
@@ -46,6 +47,13 @@ void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _o
     /* Read dataset from disk */
     dataspace.selectHyperslab(H5S_SELECT_SET, count, offset, stride, block); 
     dataset.read(out, dtype, memspace, dataspace);
+}
+
+void dataset_example(H5File &file)
+{
+    DataSet dataset = file.openDataSet("sentence1_tokens");
+    int num_tokens = dataset.getSpace().getSelectNpoints();
+    printf("%d\n", num_tokens);
 }
 
 void tokens_example(H5File &file)
@@ -86,15 +94,49 @@ void transitions_example(H5File &file)
     transitions_dataset.close();
 }
 
+void tokenize_example(H5File &file)
+{
+    map<string, int> token_to_index;
+
+    LOGDEBUG("Tokenizing.");
+
+    // Tokens example.
+    DataSet tokens_dataset = file.openDataSet("sentence1_tokens");
+    int num_tokens = tokens_dataset.getSpace().getSelectNpoints();
+    char *tokens_data[1];
+    int offset;
+    for (int i = 0; i < num_tokens; i++)
+    {
+        offset = i;
+        read_variable_length_data(file, tokens_dataset, tokens_data, offset);
+        string tokens_string = tokens_data[0];
+        auto tokens_json = json::parse(tokens_string);
+        // cout << tokens_json << endl;
+        // cout << tokens_json.size() << endl;
+        for (int j = 0; j < tokens_json.size(); j++)
+        {
+            string tokens_sample = tokens_json[j];
+            // cout << tokens_sample << endl;
+        }
+        free(tokens_data[0]);
+    }
+
+    LOGDEBUG("Done tokenizing.");
+
+    tokens_dataset.close();
+}
+
 int main(int argc, char *argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
     gflags::ShutDownCommandLineFlags();
 
-    H5File file(FLAGS_train_file, H5F_ACC_RDONLY);
+    H5File file(FLAGS_input_file, H5F_ACC_RDONLY);
 
-    tokens_example(file);
-    transitions_example(file);
+    // dataset_example(file);
+    // tokens_example(file);
+    // transitions_example(file);
+    tokenize_example(file);
 
     file.close();
 
