@@ -30,8 +30,6 @@ TODO:
 
 DEFINE_string(train_file, "train.h5", "Data file");
 DEFINE_string(eval_file, "test.h5", "Data file");
-DEFINE_string(weight1_file, "w1", "Data file");
-DEFINE_string(weight2_file, "w2", "Data file");
 DEFINE_int32(data_size, 60000, "Data dim");
 DEFINE_int32(eval_data_size, 100, "Data dim");
 DEFINE_int32(batch_size, 100, "Data dim");
