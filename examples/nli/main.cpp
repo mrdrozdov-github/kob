@@ -20,9 +20,17 @@ using json = nlohmann::json;
 
 TODO:
 
+- [ ] Properly tokenize sentences.
+- [ ] Read batches (tokens and transitions)
+- [ ] Pad sentences (and transitions)
+- [ ] Read pretrained embeddings and embed tokens
+        - simple example: https://github.com/oxford-cs-ml-2015/practical6/blob/master/Embedding.lua
+        - https://github.com/torch/nn/blob/master/doc/criterion.md#distanceratiocriterion
+        - https://github.com/ganeshjawahar/dl4nlp-made-easy/blob/master/word2vec/cbow.lua
+
 */
 
-DEFINE_string(input_file, "train.h5", "Data file");
+DEFINE_string(input_file, "dev_matched.h5", "Data file");
 
 void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _offset)
 {
@@ -146,6 +154,60 @@ map<string, int> tokenize_example(H5File &file)
     return token_to_index;
 }
 
+struct NLIObject
+{
+    vector<string> sentence1_tokens;
+    vector<string> sentence2_tokens;
+    vector<int> sentence1_transitions;
+    vector<int> sentence2_transitions;
+    int label;
+
+    NLIObject() {}
+};
+
+template<typename T>
+void read_dataset(H5File &file, string datasetname, vector<T> &out_vec, int offset)
+{
+    char *out[1];
+    DataSet dataset = file.openDataSet(datasetname);
+    read_variable_length_data(file, dataset, out, offset);
+    string out_str = out[0];
+    auto out_json = json::parse(out_str);
+    for (int i = 0; i < out_json.size(); i++)
+    {
+        out_vec.push_back(out_json[i]);
+    }
+    free(out[0]);
+    dataset.close();
+}
+
+void read_dataset(H5File &file, string datasetname, void *out, int offset)
+{
+    DataSet dataset = file.openDataSet(datasetname);
+    read_variable_length_data(file, dataset, out, offset);
+    dataset.close();
+}
+
+NLIObject *read_example(H5File &file, int offset)
+{
+    NLIObject *result = new NLIObject;
+
+    read_dataset<string>(file, "sentence1_tokens", result->sentence1_tokens, offset);
+    read_dataset<int>(file, "sentence1_transitions", result->sentence1_transitions, offset);
+    read_dataset<string>(file, "sentence2_tokens", result->sentence2_tokens, offset);
+    read_dataset<int>(file, "sentence2_transitions", result->sentence2_transitions, offset);
+    read_dataset(file, "labels", &(result->label), offset);
+
+    return result;
+}
+
+void embed_example(H5File &file)
+{
+    NLIObject *result = read_example(file, 1);
+
+    vector<string> tokens = result->sentence1_tokens;
+}
+
 int main(int argc, char *argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -156,7 +218,8 @@ int main(int argc, char *argv[])
     // dataset_example(file);
     // tokens_example(file);
     // transitions_example(file);
-    tokenize_example(file);
+    // tokenize_example(file);
+    embed_example(file);
 
     file.close();
 
