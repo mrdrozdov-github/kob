@@ -1,6 +1,9 @@
 #include <math.h>
-#include <iostream>
 #include <map>
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
 
 #include "../../kob/kob.h"
 #include "../../kob/batch_reader.h"
@@ -201,11 +204,109 @@ NLIObject *read_example(H5File &file, int offset)
     return result;
 }
 
+// source: https://stackoverflow.com/a/236803/1185578
+template<typename Out>
+void split(const std::string &s, char delim, Out result) {
+    std::stringstream ss;
+    ss.str(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        *(result++) = item;
+    }
+}
+
+// source: https://stackoverflow.com/a/236803/1185578
+std::vector<std::string> split(const std::string &s, char delim) {
+    std::vector<std::string> elems;
+    split(s, delim, std::back_inserter(elems));
+    return elems;
+}
+
+void read_embeddings(string filename, map<string, int> token_to_index, int embedding_size)
+{
+    /*
+
+    2017-06-10 12:38:05 DEBUG [read_embeddings] [main.cpp:237] Reading: /Users/Andrew/data/glove.6B.100d.txt
+    2017-06-10 12:38:38 DEBUG [read_embeddings] [main.cpp:272] Done.
+    2017-06-10 12:38:38 DEBUG [read_embeddings] [main.cpp:278] Found 16 in vocab.
+
+    */
+
+    map<string, int> new_token_to_index; // reassign indices based on the order they appear in embedding file
+    int next_index = 0;
+
+    // 1. Allocate an embedding tensor with size of original vocab
+    int vocab_size = token_to_index.size();
+    THFloatTensor *embeddings = THFloatTensor_newWithSize2d(vocab_size, embedding_size);
+
+    // 2. Read embedding file line by line. If in vocab, create a new item in the new token_to_index and
+    //      and add a row to the embedding tensor.
+
+    LOGDEBUG("Reading: %s", filename.c_str());
+
+    // 
+    ifstream file(filename);
+    string linebuffer;
+
+    while (file && getline(file, linebuffer)){
+        if (linebuffer.length() == 0) continue;
+
+        // Split line.
+        vector<string> elems = split(linebuffer, ' ');
+        string key = elems[0];
+
+        // Check if token exists in vocab.
+        int ii;
+        map<string, int>::iterator it = token_to_index.find(key);
+        if (it != token_to_index.end())
+        {
+            // Read single embedding.
+            ii = 0;
+            for (vector<string>::iterator cur = elems.begin() + 1; cur != elems.end(); ++cur) {
+                float val = stof(*cur);
+                THFloatTensor_set2d(embeddings, next_index, ii, val);
+                ii++;
+            }
+
+            // Update new token_to_index.
+            new_token_to_index.insert(pair<string,int>(key, next_index));
+            next_index++;
+        }
+
+    }
+    LOGDEBUG("Done.");
+
+    // 3. When complete, slice the embedding tensor, keeping only the rows that have been assigned.
+    THFloatTensor *out_embeddings = THFloatTensor_newWithSize2d(vocab_size, next_index);
+    THFloatTensor_narrow(out_embeddings, embeddings, 0, 0, next_index);
+    LOGDEBUG("Found %d in vocab.", next_index);
+}
+
 void embed_example(H5File &file)
 {
     NLIObject *result = read_example(file, 1);
 
     vector<string> tokens = result->sentence1_tokens;
+
+    map<string, int> token_to_index;
+    int next_index = 0;
+
+    for (int i = 0; i < tokens.size(); i++)
+    {
+        string sample = tokens[i];
+        map<string, int>::iterator it = token_to_index.find(sample);
+        if (it != token_to_index.end())
+        {
+            // pass
+        } else {
+            token_to_index.insert(pair<string,int>(sample, next_index));
+            next_index++;
+        }
+    }
+
+
+    // TODO: Get new embeddings and new token_to_index.
+    read_embeddings("/Users/Andrew/data/glove.6B.100d.txt", token_to_index, 100);
 }
 
 int main(int argc, char *argv[])
