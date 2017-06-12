@@ -16,6 +16,10 @@
 
 #define SPACE1_RANK 1
 
+// Progressbar.
+#define PBSTR "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
+#define PBWIDTH 60
+
 using namespace std;
 using json = nlohmann::json;
 
@@ -31,6 +35,11 @@ TODO:
 */
 
 DEFINE_string(input_file, "dev_matched.h5", "Data file");
+DEFINE_int32(batch_size, 32, "Batch size");
+DEFINE_string(embedding_file, "/Users/Andrew/data/glove.6B.100d.txt", "GloVe embedding file");
+DEFINE_int32(embedding_size, 100, "Embedding size");
+DEFINE_int32(seq_length, 300, "Sequence length");
+DEFINE_int32(hidden_dim, 100, "Hidden dim");
 
 void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _offset)
 {
@@ -40,8 +49,8 @@ void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _o
     hsize_t offset[1], count[1], stride[1], block[1];
     hsize_t dims[1], dimsm[1];
 
-    int num_tokens = dataset.getSpace().getSelectNpoints();
-    dims[0] = num_tokens;
+    int num_examples = dataset.getSpace().getSelectNpoints();
+    dims[0] = num_examples;
     dimsm[0] = 1;
 
     offset[0] = _offset; // NOTE: Change this to select different elements in the dataset.
@@ -57,11 +66,26 @@ void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _o
     dataset.read(out, dtype, memspace, dataspace);
 }
 
+void printProgress(double percentage)
+{
+    // https://stackoverflow.com/a/36315819/1185578
+    int val = (int) (percentage * 100);
+    int lpad = (int) (percentage * PBWIDTH);
+    int rpad = PBWIDTH - lpad;
+    printf ("\r%3d%% [%.*s%*s]", val, lpad, PBSTR, rpad, "");
+    fflush (stdout);
+}
+
+void finishProgress()
+{
+    printf("\n");
+}
+
 void dataset_example(H5File &file)
 {
     DataSet dataset = file.openDataSet("sentence1_tokens");
-    int num_tokens = dataset.getSpace().getSelectNpoints();
-    printf("%d\n", num_tokens);
+    int num_examples = dataset.getSpace().getSelectNpoints();
+    printf("%d\n", num_examples);
 }
 
 void tokens_example(H5File &file)
@@ -119,8 +143,6 @@ map<string, int> tokenize_example(H5File &file)
     map<string, int> token_to_index;
     int next_index = 0;
 
-    LOGDEBUG("Tokenizing.");
-
     // Tokens example.
     DataSet tokens_dataset = file.openDataSet("sentence1_tokens");
     int num_tokens = tokens_dataset.getSpace().getSelectNpoints();
@@ -147,8 +169,6 @@ map<string, int> tokenize_example(H5File &file)
         free(tokens_data[0]);
     }
 
-    LOGDEBUG("Done tokenizing.");
-
     tokens_dataset.close();
 
     return token_to_index;
@@ -163,6 +183,7 @@ struct NLIObject
     int label;
 
     NLIObject() {}
+    ~NLIObject() {}
 };
 
 template<typename T>
@@ -239,8 +260,6 @@ pair<THFloatTensor *, map<string, int>> read_embeddings(string filename, map<str
     // 2. Read embedding file line by line. If in vocab, create a new item in the new token_to_index and
     //      and add a row to the embedding tensor.
 
-    LOGDEBUG("Reading: %s", filename.c_str());
-
     // 
     ifstream file(filename);
     string linebuffer;
@@ -270,18 +289,11 @@ pair<THFloatTensor *, map<string, int>> read_embeddings(string filename, map<str
             next_index++;
         }
 
-        // TODO: Remove this.
-        if (next_index > 10) {
-            break;
-        }
-
     }
-    LOGDEBUG("Done.");
 
     // 3. When complete, slice the embedding tensor, keeping only the rows that have been assigned.
     THFloatTensor *out_embeddings = THFloatTensor_newWithSize2d(vocab_size, next_index);
     THFloatTensor_narrow(out_embeddings, embeddings, 0, 0, next_index);
-    LOGDEBUG("Found %d in vocab.", next_index);
 
     return pair<THFloatTensor *, map<string, int>>(out_embeddings, new_token_to_index);
 }
@@ -358,7 +370,7 @@ void embed_example(H5File &file)
     }
 
     pair<THFloatTensor *, map<string, int>> embeddings_out =
-        read_embeddings("/Users/Andrew/data/glove.6B.100d.txt", token_to_index, embedding_size);
+        read_embeddings(FLAGS_embedding_file, token_to_index, embedding_size);
 
     THFloatTensor *embeddings = embeddings_out.first;
     map<string, int> embed_token_to_index = embeddings_out.second;
@@ -376,6 +388,139 @@ void embed_example(H5File &file)
     }
 }
 
+int get_num_examples(H5File &file)
+{
+    DataSet dataset = file.openDataSet("labels");
+    int num_examples = dataset.getSpace().getSelectNpoints();
+    return num_examples;
+}
+
+map<string, int> get_initial_tokens(H5File &file)
+{
+    int batch_size = FLAGS_batch_size;
+    int seq_length = FLAGS_seq_length;
+    int num_examples = get_num_examples(file);
+    NLIObject *result;
+
+    vector<string> tokens;
+    map<string, int> token_to_index; // TODO: This can simply be a set.
+    int next_index = 0;
+
+    for (int i_example = 0; i_example < num_examples; i_example++)
+    {
+        result = read_example(file, i_example);
+
+        // Tokens for sentence1.
+        tokens = result->sentence1_tokens;
+        for (int i = 0; i < tokens.size(); i++)
+        {
+            string sample = tokens[i];
+            map<string, int>::iterator it = token_to_index.find(sample);
+            if (it != token_to_index.end())
+            {
+                // pass
+            } else {
+                token_to_index.insert(pair<string,int>(sample, next_index));
+                next_index++;
+            }
+        }
+
+        // Tokens for sentence2.
+        tokens = result->sentence2_tokens;
+        for (int i = 0; i < tokens.size(); i++)
+        {
+            string sample = tokens[i];
+            map<string, int>::iterator it = token_to_index.find(sample);
+            if (it != token_to_index.end())
+            {
+                // pass
+            } else {
+                token_to_index.insert(pair<string,int>(sample, next_index));
+                next_index++;
+            }
+        }
+
+        free(result);
+    }
+
+    return token_to_index;
+}
+
+void full_example(H5File &file)
+{
+    int batch_size = FLAGS_batch_size;
+    int seq_length = FLAGS_seq_length;
+    int embedding_size = FLAGS_embedding_size;
+    int max_epochs = 1;
+    int num_examples = get_num_examples(file);
+    int num_batches = num_examples / batch_size;
+
+
+    // 1.
+    LOGDEBUG("Reading tokens: start.");
+    map<string, int> token_to_index = get_initial_tokens(file);
+    LOGDEBUG("Found %lu tokens.", token_to_index.size());
+    LOGDEBUG("Reading tokens: done.");
+
+
+    // 2.
+    LOGDEBUG("Reading embeddings: start.");
+    LOGDEBUG("Reading: %s", FLAGS_embedding_file.c_str());
+    pair<THFloatTensor *, map<string, int>> embeddings_out =
+        read_embeddings(FLAGS_embedding_file, token_to_index, embedding_size);
+
+    THFloatTensor *embeddings = embeddings_out.first;
+    map<string, int> embed_token_to_index = embeddings_out.second;
+    LOGDEBUG("Found %lu tokens.", embed_token_to_index.size());
+    LOGDEBUG("Reading embeddings: done.");
+
+
+    // 3.
+    LOGDEBUG("Iterating over dataset: start.");
+    for (int epoch = 0; epoch < max_epochs; epoch++) {
+        for (int i_batch = 0; i_batch < num_batches; i_batch++) {
+            NLIObject *batch_objects[batch_size];
+            vector<string> tokens;
+
+            // Read batches.
+            for (int b = 0; b < batch_size; b++) {
+                batch_objects[b] = read_example(file, b); // TODO: Use shuffled indices.
+            }
+
+            // Create batched & embedded tokens.
+            THFloatTensor *batch = THFloatTensor_newWithSize3d(batch_size * 2, seq_length, embedding_size);
+            THFloatTensor_fill(batch, 0.0);
+            THFloatTensor *batch_row = THFloatTensor_new();
+
+            // Embed sentence1.
+            for (int b = 0; b < batch_size; b++) {
+                tokens = batch_objects[b]->sentence1_tokens;
+                THFloatTensor_select(batch_row, batch, 0, b);
+                simple_embed(batch_row, tokens, embed_token_to_index, embeddings);
+            }
+
+            // Embed sentence2.
+            for (int b = 0; b < batch_size; b++) {
+                tokens = batch_objects[b]->sentence2_tokens;
+                THFloatTensor_select(batch_row, batch, 0, batch_size + b);
+                simple_embed(batch_row, tokens, embed_token_to_index, embeddings);
+            }
+
+            // Cleanup.
+            for (int b = 0; b < batch_size; b++) {
+                free(batch_objects[b]);
+            }
+
+            THFloatTensor_free(batch);
+
+            printProgress((i_batch + 1) / (float)num_batches);
+        }
+        finishProgress();
+        LOGDEBUG("Finished epoch: %d", epoch + 1);
+    }
+    LOGDEBUG("Iterating over dataset: done.");
+}
+
 int main(int argc, char *argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -387,7 +532,8 @@ int main(int argc, char *argv[])
     // tokens_example(file);
     // transitions_example(file);
     // tokenize_example(file);
-    embed_example(file);
+    // embed_example(file);
+    full_example(file);
 
     file.close();
 
