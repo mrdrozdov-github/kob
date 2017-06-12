@@ -81,99 +81,6 @@ void finishProgress()
     printf("\n");
 }
 
-void dataset_example(H5File &file)
-{
-    DataSet dataset = file.openDataSet("sentence1_tokens");
-    int num_examples = dataset.getSpace().getSelectNpoints();
-    printf("%d\n", num_examples);
-}
-
-void tokens_example(H5File &file)
-{
-    int offset = 13;
-
-    // Tokens example.
-    DataSet tokens_dataset = file.openDataSet("sentence1_tokens");
-    char *tokens_data[1];
-    read_variable_length_data(file, tokens_dataset, tokens_data, offset);
-
-    string tokens_string = tokens_data[0];
-    auto tokens_json = json::parse(tokens_string);
-    cout << tokens_json << endl;
-    string tokens_sample = tokens_json[0];
-    cout << tokens_sample << endl;
-
-    free(tokens_data[0]);
-    tokens_dataset.close();
-}
-
-void transitions_example(H5File &file)
-{
-    int offset = 13;
-
-    // Transitions example.
-    DataSet transitions_dataset = file.openDataSet("sentence1_transitions");
-    char *transitions_data[1];
-    read_variable_length_data(file, transitions_dataset, transitions_data, offset);
-
-    string transitions_string = transitions_data[0];
-    auto transitions_json = json::parse(transitions_string);
-    cout << transitions_json << endl;
-    int transitions_sample = transitions_json[0];
-    cout << transitions_sample << endl;
-
-    free(transitions_data[0]);
-    transitions_dataset.close();
-}
-
-map<string, int> tokenize_example(H5File &file)
-{
-    /*
-
-    $ ./demo -input_file dev_matched.h5
-    2017-06-09 16:40:49 DEBUG [tokenize_example] [main.cpp:102] Tokenizing.
-    2017-06-09 16:40:50 DEBUG [tokenize_example] [main.cpp:130] Done tokenizing.
-
-    $ ./demo -input_file train.h5
-    2017-06-09 16:40:52 DEBUG [tokenize_example] [main.cpp:102] Tokenizing.
-    2017-06-09 16:41:27 DEBUG [tokenize_example] [main.cpp:130] Done tokenizing.
-
-    */
-
-    map<string, int> token_to_index;
-    int next_index = 0;
-
-    // Tokens example.
-    DataSet tokens_dataset = file.openDataSet("sentence1_tokens");
-    int num_tokens = tokens_dataset.getSpace().getSelectNpoints();
-    char *tokens_data[1];
-    int offset;
-    for (int i = 0; i < num_tokens; i++)
-    {
-        offset = i;
-        read_variable_length_data(file, tokens_dataset, tokens_data, offset);
-        string tokens_string = tokens_data[0];
-        auto tokens_json = json::parse(tokens_string);
-        for (int j = 0; j < tokens_json.size(); j++)
-        {
-            string tokens_sample = tokens_json[j];
-            map<string, int>::iterator it = token_to_index.find(tokens_sample);
-            if (it != token_to_index.end())
-            {
-                // pass
-            } else {
-                token_to_index.insert(pair<string,int>(tokens_sample, next_index));
-                next_index++;
-            }
-        }
-        free(tokens_data[0]);
-    }
-
-    tokens_dataset.close();
-
-    return token_to_index;
-}
-
 struct NLIObject
 {
     vector<string> sentence1_tokens;
@@ -320,74 +227,6 @@ void simple_embed(THFloatTensor *out, vector<string> tokens, map<string, int> to
     }
 }
 
-void embed_example(H5File &file)
-{
-    int batch_size = 3;
-    int seq_length = 100;
-    int embedding_size = 100;
-    NLIObject *result[batch_size];
-
-    for (int b = 0; b < batch_size; b++)
-    {
-        result[b] = read_example(file, b);
-    }
-
-    vector<string> tokens;
-    map<string, int> token_to_index; // TODO: This can simply be a set.
-    int next_index = 0;
-
-    for (int b = 0; b < batch_size; b++)
-    {
-        // Tokens for sentence1.
-        tokens = result[b]->sentence1_tokens;
-        for (int i = 0; i < tokens.size(); i++)
-        {
-            string sample = tokens[i];
-            map<string, int>::iterator it = token_to_index.find(sample);
-            if (it != token_to_index.end())
-            {
-                // pass
-            } else {
-                token_to_index.insert(pair<string,int>(sample, next_index));
-                next_index++;
-            }
-        }
-
-        // Tokens for sentence2.
-        tokens = result[b]->sentence2_tokens;
-        for (int i = 0; i < tokens.size(); i++)
-        {
-            string sample = tokens[i];
-            map<string, int>::iterator it = token_to_index.find(sample);
-            if (it != token_to_index.end())
-            {
-                // pass
-            } else {
-                token_to_index.insert(pair<string,int>(sample, next_index));
-                next_index++;
-            }
-        }
-    }
-
-    pair<THFloatTensor *, map<string, int>> embeddings_out =
-        read_embeddings(FLAGS_embedding_file, token_to_index, embedding_size);
-
-    THFloatTensor *embeddings = embeddings_out.first;
-    map<string, int> embed_token_to_index = embeddings_out.second;
-
-    // Example batch.
-    // TODO: Use lookup table.
-    THFloatTensor *batch = THFloatTensor_newWithSize3d(batch_size*2, seq_length, embedding_size);
-    THFloatTensor_fill(batch, 0.0);
-    THFloatTensor *batch_row = THFloatTensor_new();
-    for (int b = 0; b < batch_size; b++)
-    {
-        tokens = result[b]->sentence1_tokens;
-        THFloatTensor_select(batch_row, batch, 0, b);
-        simple_embed(batch_row, tokens, embed_token_to_index, embeddings);
-    }
-}
-
 int get_num_examples(H5File &file)
 {
     DataSet dataset = file.openDataSet("labels");
@@ -446,7 +285,7 @@ map<string, int> get_initial_tokens(H5File &file)
     return token_to_index;
 }
 
-void full_example(H5File &file)
+void run(H5File &file)
 {
     int batch_size = FLAGS_batch_size;
     int seq_length = FLAGS_seq_length;
@@ -528,12 +367,7 @@ int main(int argc, char *argv[])
 
     H5File file(FLAGS_input_file, H5F_ACC_RDONLY);
 
-    // dataset_example(file);
-    // tokens_example(file);
-    // transitions_example(file);
-    // tokenize_example(file);
-    // embed_example(file);
-    full_example(file);
+    run(file);
 
     file.close();
 
