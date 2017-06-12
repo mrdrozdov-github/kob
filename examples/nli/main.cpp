@@ -23,13 +23,10 @@ using json = nlohmann::json;
 
 TODO:
 
-- [ ] Properly tokenize sentences.
-- [ ] Read batches (tokens and transitions)
-- [ ] Pad sentences (and transitions)
-- [ ] Read pretrained embeddings and embed tokens
-        - simple example: https://github.com/oxford-cs-ml-2015/practical6/blob/master/Embedding.lua
-        - https://github.com/torch/nn/blob/master/doc/criterion.md#distanceratiocriterion
-        - https://github.com/ganeshjawahar/dl4nlp-made-easy/blob/master/word2vec/cbow.lua
+- [x] Properly tokenize sentences.
+- [x] Read batches (tokens and transitions)
+- [x] Pad sentences (and transitions)
+- [ ] Full example.
 
 */
 
@@ -222,7 +219,7 @@ std::vector<std::string> split(const std::string &s, char delim) {
     return elems;
 }
 
-void read_embeddings(string filename, map<string, int> token_to_index, int embedding_size)
+pair<THFloatTensor *, map<string, int>> read_embeddings(string filename, map<string, int> token_to_index, int embedding_size)
 {
     /*
 
@@ -273,6 +270,11 @@ void read_embeddings(string filename, map<string, int> token_to_index, int embed
             next_index++;
         }
 
+        // TODO: Remove this.
+        if (next_index > 10) {
+            break;
+        }
+
     }
     LOGDEBUG("Done.");
 
@@ -280,33 +282,98 @@ void read_embeddings(string filename, map<string, int> token_to_index, int embed
     THFloatTensor *out_embeddings = THFloatTensor_newWithSize2d(vocab_size, next_index);
     THFloatTensor_narrow(out_embeddings, embeddings, 0, 0, next_index);
     LOGDEBUG("Found %d in vocab.", next_index);
+
+    return pair<THFloatTensor *, map<string, int>>(out_embeddings, new_token_to_index);
+}
+
+void simple_embed(THFloatTensor *out, vector<string> tokens, map<string, int> token_to_index, THFloatTensor *embeddings)
+{
+    int embedding_size = embeddings->size[1];
+    THFloatTensor *_out = THFloatTensor_new();
+    THFloatTensor *_embedding = THFloatTensor_new();
+    for (int i = 0; i < tokens.size(); i++)
+    {
+        string token = tokens[i];
+        map<string, int>::iterator it = token_to_index.find(token);
+        if (it != token_to_index.end())
+        {
+            int index = (*it).second;
+
+            THFloatTensor_select(_out, out, 0, i);
+            THFloatTensor_select(_embedding, embeddings, 0, index);
+            THFloatTensor_copy(_out, _embedding);
+        } else {
+            // do nothing (or fill with zeros. this is an UNK!)
+        }
+    }
 }
 
 void embed_example(H5File &file)
 {
-    NLIObject *result = read_example(file, 1);
+    int batch_size = 3;
+    int seq_length = 100;
+    int embedding_size = 100;
+    NLIObject *result[batch_size];
 
-    vector<string> tokens = result->sentence1_tokens;
+    for (int b = 0; b < batch_size; b++)
+    {
+        result[b] = read_example(file, b);
+    }
 
-    map<string, int> token_to_index;
+    vector<string> tokens;
+    map<string, int> token_to_index; // TODO: This can simply be a set.
     int next_index = 0;
 
-    for (int i = 0; i < tokens.size(); i++)
+    for (int b = 0; b < batch_size; b++)
     {
-        string sample = tokens[i];
-        map<string, int>::iterator it = token_to_index.find(sample);
-        if (it != token_to_index.end())
+        // Tokens for sentence1.
+        tokens = result[b]->sentence1_tokens;
+        for (int i = 0; i < tokens.size(); i++)
         {
-            // pass
-        } else {
-            token_to_index.insert(pair<string,int>(sample, next_index));
-            next_index++;
+            string sample = tokens[i];
+            map<string, int>::iterator it = token_to_index.find(sample);
+            if (it != token_to_index.end())
+            {
+                // pass
+            } else {
+                token_to_index.insert(pair<string,int>(sample, next_index));
+                next_index++;
+            }
+        }
+
+        // Tokens for sentence2.
+        tokens = result[b]->sentence2_tokens;
+        for (int i = 0; i < tokens.size(); i++)
+        {
+            string sample = tokens[i];
+            map<string, int>::iterator it = token_to_index.find(sample);
+            if (it != token_to_index.end())
+            {
+                // pass
+            } else {
+                token_to_index.insert(pair<string,int>(sample, next_index));
+                next_index++;
+            }
         }
     }
 
+    pair<THFloatTensor *, map<string, int>> embeddings_out =
+        read_embeddings("/Users/Andrew/data/glove.6B.100d.txt", token_to_index, embedding_size);
 
-    // TODO: Get new embeddings and new token_to_index.
-    read_embeddings("/Users/Andrew/data/glove.6B.100d.txt", token_to_index, 100);
+    THFloatTensor *embeddings = embeddings_out.first;
+    map<string, int> embed_token_to_index = embeddings_out.second;
+
+    // Example batch.
+    // TODO: Use lookup table.
+    THFloatTensor *batch = THFloatTensor_newWithSize3d(batch_size*2, seq_length, embedding_size);
+    THFloatTensor_fill(batch, 0.0);
+    THFloatTensor *batch_row = THFloatTensor_new();
+    for (int b = 0; b < batch_size; b++)
+    {
+        tokens = result[b]->sentence1_tokens;
+        THFloatTensor_select(batch_row, batch, 0, b);
+        simple_embed(batch_row, tokens, embed_token_to_index, embeddings);
+    }
 }
 
 int main(int argc, char *argv[])
