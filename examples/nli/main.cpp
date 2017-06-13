@@ -41,6 +41,7 @@ DEFINE_int32(embedding_size, 100, "Embedding size");
 DEFINE_int32(seq_length, 300, "Sequence length");
 DEFINE_int32(hidden_dim, 100, "Hidden dimension");
 DEFINE_int32(num_classes, 3, "Number of classes");
+DEFINE_double(learning_rate, 0.001, "Learning rate");
 
 void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _offset)
 {
@@ -446,6 +447,27 @@ void run(H5File &file)
             // 5. Backward pass.
             mlp.clear_grads();
 
+            Variable *grad_input = loss->backward();
+
+            // Accuracy. TODO: Optionally hide.
+            bool run_acc = false;
+            if (run_acc) {
+                pair<Variable *, THLongTensor *> guess = t_Max(probs, 1);
+                THLongTensor_sub(target, target, 1);
+                THLongTensor *is_equal = t_Equal(target, guess.second);
+                int correct = THLongTensor_sumall(is_equal);
+            }
+
+            // printf("Step: %d Correct: %d/%d (%f)\n", i_batch, correct, batch_size, (correct/(float)batch_size));
+
+            // delete guess.first;
+            // delete guess.second;
+            // delete is_equal;
+
+            // Gradient update.
+            for (int ii = 0; ii < 2; ii++) {
+                THFloatTensor_csub(mlp.layers[ii]->weight, mlp.layers[ii]->weight, FLAGS_learning_rate, mlp.layers[ii]->gradWeight);
+            }
 
             delete loss;
             delete probs;
@@ -453,7 +475,7 @@ void run(H5File &file)
             for (int ii = 0; ii < 3; ii++) {
                 delete mlp.inputs[ii];
             }
-
+            delete grad_input;
 
             // Cleanup.
             THFloatTensor_free(h);
