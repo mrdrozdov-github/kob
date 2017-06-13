@@ -390,6 +390,8 @@ void run(H5File &file)
             THFloatTensor_fill(batch, 0.0);
             THFloatTensor *batch_row = THFloatTensor_new();
 
+            THLongTensor *target = THLongTensor_newWithSize1d(batch_size);
+
             // Embed sentence1.
             for (int b = 0; b < batch_size; b++) {
                 tokens = batch_objects[b]->sentence1_tokens;
@@ -403,6 +405,14 @@ void run(H5File &file)
                 THFloatTensor_select(batch_row, batch, 0, batch_size + b);
                 simple_embed(batch_row, tokens, embed_token_to_index, embeddings);
             }
+
+            // Labels.
+            for (int b = 0; b < batch_size; b++) {
+                THLongTensor_set1d(target, b, batch_objects[b]->label);
+            }
+
+            // Fix labels.
+            THLongTensor_add(target, target, 1);
 
             // Cleanup.
             for (int b = 0; b < batch_size; b++) {
@@ -426,13 +436,24 @@ void run(H5File &file)
             THFloatTensor *h = THFloatTensor_new();
             THFloatTensor_cat(h, sent1, sent2, 1);
 
-            // 4. Run model.
+            // 4. Forward pass.
             Variable *logits = mlp.forward(new Variable(h));
 
+            // 4a. Loss.
+            Variable *probs = F_log_softmax(logits);
+            Variable *loss = F_nll(probs, target);
+
+            // 5. Backward pass.
+            mlp.clear_grads();
+
+
+            delete loss;
+            delete probs;
+            delete logits;
             for (int ii = 0; ii < 3; ii++) {
                 delete mlp.inputs[ii];
             }
-            delete logits;
+
 
             // Cleanup.
             THFloatTensor_free(h);
