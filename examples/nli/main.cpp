@@ -39,7 +39,8 @@ DEFINE_int32(batch_size, 32, "Batch size");
 DEFINE_string(embedding_file, "/Users/Andrew/data/glove.6B.100d.txt", "GloVe embedding file");
 DEFINE_int32(embedding_size, 100, "Embedding size");
 DEFINE_int32(seq_length, 300, "Sequence length");
-DEFINE_int32(hidden_dim, 100, "Hidden dim");
+DEFINE_int32(hidden_dim, 100, "Hidden dimension");
+DEFINE_int32(num_classes, 3, "Number of classes");
 
 void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _offset)
 {
@@ -196,6 +197,11 @@ pair<THFloatTensor *, map<string, int>> read_embeddings(string filename, map<str
             next_index++;
         }
 
+        // TODO Remove
+        if (ii > 10) {
+            break;
+        }
+
     }
 
     // 3. When complete, slice the embedding tensor, keeping only the rows that have been assigned.
@@ -285,6 +291,57 @@ map<string, int> get_initial_tokens(H5File &file)
     return token_to_index;
 }
 
+class MLP
+{
+    private:
+        int input_dim;
+        int hidden_dim;
+        int output_dim;
+    public:
+        MLP(int input_dim, int hidden_dim, int output_dim);
+        ~MLP();
+        Variable *forward(Variable *x);
+        void clear_grads();
+        Variable *inputs[3];
+        Variable *outputs[3];
+        Linear *layers[2];
+};
+
+MLP::MLP(int input_dim, int hidden_dim, int output_dim) {
+    this->input_dim = input_dim;
+    this->hidden_dim = hidden_dim;
+    this->output_dim = output_dim;
+
+    this->layers[0] = new Linear(input_dim, hidden_dim);
+    this->layers[1] = new Linear(hidden_dim, output_dim);
+}
+
+MLP::~MLP() {
+    delete this->layers[0];
+    delete this->layers[1];
+}
+
+void MLP::clear_grads() {
+    this->layers[0]->clear_grads();
+    this->layers[1]->clear_grads();
+}
+
+Variable *MLP::forward(Variable *x) {
+    // Linear
+    this->inputs[0] = x;
+    this->outputs[0] = this->layers[0]->call(this->inputs[0]);
+
+    // Sigmoid
+    this->inputs[1] = this->outputs[0];
+    this->outputs[1] = F_sigmoid(this->inputs[1]);
+
+    // Linear
+    this->inputs[2] = this->outputs[1];
+    this->outputs[2] = this->layers[1]->call(this->inputs[1]);
+
+    return this->outputs[2];
+}
+
 void run(H5File &file)
 {
     int batch_size = FLAGS_batch_size;
@@ -293,6 +350,8 @@ void run(H5File &file)
     int max_epochs = 1;
     int num_examples = get_num_examples(file);
     int num_batches = num_examples / batch_size;
+
+    MLP mlp = MLP(FLAGS_embedding_size * 2, FLAGS_hidden_dim, FLAGS_num_classes);
 
 
     // 1.
@@ -350,6 +409,37 @@ void run(H5File &file)
                 free(batch_objects[b]);
             }
 
+            // Prepare input.
+            
+            // 1. Sum
+            THFloatTensor *summed = THFloatTensor_new();
+            THFloatTensor_sum(summed, batch, 1, true);
+            THFloatTensor_resize2d(summed, batch_size * 2, embedding_size);
+
+            // 2. Narrow
+            THFloatTensor *sent1 = THFloatTensor_new();
+            THFloatTensor *sent2 = THFloatTensor_new();
+            THFloatTensor_narrow(sent1, summed, 0, 0, batch_size);
+            THFloatTensor_narrow(sent2, summed, 0, batch_size, batch_size);
+
+            // 3. Concat
+            THFloatTensor *h = THFloatTensor_new();
+            THFloatTensor_cat(h, sent1, sent2, 1);
+
+            // 4. Run model.
+            Variable *logits = mlp.forward(new Variable(h));
+
+            for (int ii = 0; ii < 3; ii++) {
+                delete mlp.inputs[ii];
+            }
+            delete logits;
+
+            // Cleanup.
+            THFloatTensor_free(h);
+            THFloatTensor_free(sent1);
+            THFloatTensor_free(sent2);
+            THFloatTensor_free(summed);
+            THFloatTensor_free(batch_row);
             THFloatTensor_free(batch);
 
             printProgress((i_batch + 1) / (float)num_batches);

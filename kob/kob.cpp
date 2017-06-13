@@ -56,6 +56,8 @@ Linear::Linear(int inpDim, int outpDim) {
     // THFloatTensor_zero(this->bias);
 }
 
+Linear::~Linear() {}
+
 void Linear::clear_grads() {
     THFloatTensor_zero(this->gradWeight);
     // THFloatTensor_zero(this->gradBias);
