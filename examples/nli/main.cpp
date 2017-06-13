@@ -42,6 +42,7 @@ DEFINE_int32(seq_length, 300, "Sequence length");
 DEFINE_int32(hidden_dim, 100, "Hidden dimension");
 DEFINE_int32(num_classes, 3, "Number of classes");
 DEFINE_double(learning_rate, 0.001, "Learning rate");
+DEFINE_bool(verbose, false, "Verbose");
 
 void read_variable_length_data(H5File &file, DataSet &dataset, void *out, int _offset)
 {
@@ -198,11 +199,6 @@ pair<THFloatTensor *, map<string, int>> read_embeddings(string filename, map<str
             next_index++;
         }
 
-        // TODO Remove
-        if (ii > 10) {
-            break;
-        }
-
     }
 
     // 3. When complete, slice the embedding tensor, keeping only the rows that have been assigned.
@@ -352,7 +348,21 @@ void run(H5File &file)
     int num_examples = get_num_examples(file);
     int num_batches = num_examples / batch_size;
 
+    int index[num_examples];
+    for (int ii = 0; ii < num_examples; ++ii) {
+        index[ii] = ii;
+    }
+
+
+    // Build model.
     MLP mlp = MLP(FLAGS_embedding_size * 2, FLAGS_hidden_dim, FLAGS_num_classes);
+
+    // Initialize weights.
+    THGenerator* generator = THGenerator_new();
+    THRandom_manualSeed(generator, 11);
+    for (int ii = 0; ii < 2; ii++) {
+        THFloatTensor_uniform(mlp.layers[ii]->weight, generator, -1, 1);
+    }
 
 
     // 1.
@@ -377,13 +387,16 @@ void run(H5File &file)
     // 3.
     LOGDEBUG("Iterating over dataset: start.");
     for (int epoch = 0; epoch < max_epochs; epoch++) {
+        random_shuffle(index, index + num_examples);
+
         for (int i_batch = 0; i_batch < num_batches; i_batch++) {
             NLIObject *batch_objects[batch_size];
             vector<string> tokens;
 
-            // Read batches.
+            // Read batches. TODO: Shuffle examples.
             for (int b = 0; b < batch_size; b++) {
-                batch_objects[b] = read_example(file, b); // TODO: Use shuffled indices.
+                int offset = index[i_batch * batch_size + b];
+                batch_objects[b] = read_example(file, offset); // TODO: Use shuffled indices.
             }
 
             // Create batched & embedded tokens.
@@ -444,25 +457,25 @@ void run(H5File &file)
             Variable *probs = F_log_softmax(logits);
             Variable *loss = F_nll(probs, target);
 
+            // Accuracy.
+            if (FLAGS_verbose) {
+                pair<Variable *, THLongTensor *> guess = t_Max(probs, 1);
+                THLongTensor *_target = THLongTensor_new();
+                THLongTensor_sub(_target, target, 1);
+                THLongTensor *is_equal = t_Equal(_target, guess.second);
+                int correct = THLongTensor_sumall(is_equal);
+                LOGDEBUG("Step: %d Correct: %d/%d (%f)\n", i_batch, correct, batch_size, (correct/(float)batch_size));
+
+                THLongTensor_free(_target);
+                THLongTensor_free(is_equal);
+                delete guess.first;
+                delete guess.second;
+            }
+
             // 5. Backward pass.
             mlp.clear_grads();
 
             Variable *grad_input = loss->backward();
-
-            // Accuracy. TODO: Optionally hide.
-            bool run_acc = false;
-            if (run_acc) {
-                pair<Variable *, THLongTensor *> guess = t_Max(probs, 1);
-                THLongTensor_sub(target, target, 1);
-                THLongTensor *is_equal = t_Equal(target, guess.second);
-                int correct = THLongTensor_sumall(is_equal);
-            }
-
-            // printf("Step: %d Correct: %d/%d (%f)\n", i_batch, correct, batch_size, (correct/(float)batch_size));
-
-            // delete guess.first;
-            // delete guess.second;
-            // delete is_equal;
 
             // Gradient update.
             for (int ii = 0; ii < 2; ii++) {
